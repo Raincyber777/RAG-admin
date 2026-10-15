@@ -11,4 +11,8 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    // 固定端口：用户端 5173 / 管理端 5174（跨端跳转 URL 与 store 中的常量保持一致）
+    port: 5174,
+  },
 })

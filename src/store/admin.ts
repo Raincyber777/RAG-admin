@@ -1,0 +1,377 @@
+/**
+ * 管理员端内容监管数据（演示 mock，结构与用户端各页面的数据一一对应）
+ * 课堂纪要 / 问答记录 / 题库 / 问题反馈 / 看板统计
+ */
+import { reactive, ref, computed } from 'vue'
+
+// ---------- 课堂纪要（对应用户端「课堂纪要 / 我的纪要」） ----------
+// 只有生成成功的纪要才会进入列表（无「处理中」中间态，与用户端生成完成即入列一致）
+export interface AdminNote {
+  id: string
+  title: string
+  course: string
+  uploader: string
+  createdAt: string
+  duration: string
+  theme: string
+  points: string[]
+  definitions: string[]
+  emphasized: string[]
+}
+
+export const notes = reactive<AdminNote[]>([
+  {
+    id: 'n1', title: '第12讲 泰勒展开与级数', course: '高等数学', uploader: '林小智',
+    createdAt: '2026-10-10 14:20', duration: '43:12',
+    theme: '泰勒公式、麦克劳林级数与幂级数收敛性',
+    points: [
+      '泰勒公式带佩亚诺余项与拉格朗日余项的两种形式及适用场景',
+      'e^x、sin x、cos x、ln(1+x) 的麦克劳林展开式',
+      '交错级数的莱布尼茨判别法与绝对收敛 / 条件收敛',
+    ],
+    definitions: [
+      '泰勒定理：f(x) = Σ f⁽ⁿ⁾(x₀)/n! · (x-x₀)ⁿ + Rₙ(x)',
+      '收敛半径 R = lim |aₙ/aₙ₊₁|（比值法存在时）',
+    ],
+    emphasized: [
+      '级数敛散性判断是必考点：先看通项极限是否为 0',
+      '余项的选取直接影响误差估计精度，注意题目要求',
+    ],
+  },
+  {
+    id: 'n2', title: '第5讲 进程与线程', course: '操作系统', uploader: '陈雨桐',
+    createdAt: '2026-10-11 09:05', duration: '38:47',
+    theme: '进程的概念、状态转换与线程模型',
+    points: [
+      '进程三态模型：就绪 / 运行 / 阻塞及转换条件',
+      '进程与线程的资源分配、调度单位差异',
+      '用户级线程与内核级线程的优缺点对比',
+    ],
+    definitions: [
+      'PCB：进程控制块，唯一标识存在进程的数据结构',
+      '线程：调度与分派的基本单位，共享所属进程资源',
+    ],
+    emphasized: [
+      '状态转换图中「运行→阻塞」为主动行为，「阻塞→就绪」为被动行为，易考辨析',
+    ],
+  },
+  {
+    id: 'n3', title: '第8讲 二叉树与遍历', course: '数据结构', uploader: '林小智',
+    createdAt: '2026-10-11 15:40', duration: '41:03',
+    theme: '二叉树性质、四种遍历与线索二叉树',
+    points: [
+      '二叉树五条重要性质（叶子数与度 2 结点数的关系等）',
+      '先序 / 中序 / 后序 / 层序遍历的递归与非递归实现',
+      '由遍历序列唯一确定二叉树的条件',
+    ],
+    definitions: [
+      '满二叉树 / 完全二叉树的形式化定义与编号规律',
+    ],
+    emphasized: [
+      '中序遍历 + 任一其他序遍历可唯一还原二叉树，考试高频',
+    ],
+  },
+  {
+    id: 'n5', title: '第9讲 图与最短路径', course: '数据结构', uploader: '陈雨桐',
+    createdAt: '2026-10-12 10:12', duration: '45:26',
+    theme: '图的存储结构与 Dijkstra、Floyd 算法',
+    points: [
+      '邻接矩阵与邻接表的适用场景对比',
+      'Dijkstra 算法的贪心策略与适用条件（无负权）',
+      'Floyd 算法的动态规划思想与三重循环含义',
+    ],
+    definitions: [
+      '最短路径：两顶点间权值之和最小的路径',
+    ],
+    emphasized: [
+      'Dijkstra 不能处理负权边，判断题常考；负权用 Floyd 或 Bellman-Ford',
+    ],
+  },
+  {
+    id: 'n6', title: '第13讲 多元函数微分', course: '高等数学', uploader: '周子航',
+    createdAt: '2026-10-12 11:02', duration: '40:58',
+    theme: '偏导数、全微分与多元复合函数求导',
+    points: [
+      '偏导数的定义与几何意义',
+      '全微分存在的充分条件',
+      '链式法则在多元复合函数中的展开规则',
+    ],
+    definitions: [
+      '全微分：dz = (∂z/∂x)dx + (∂z/∂y)dy',
+    ],
+    emphasized: [
+      '「偏导存在」不能推出「连续」，与一元函数结论不同，注意辨析',
+    ],
+  },
+])
+
+// ---------- 问答记录（对应用户端「智能问答」） ----------
+export interface QaSource {
+  type: '录音' | '板书'
+  label: string
+}
+
+export interface QaRecord {
+  id: string
+  question: string
+  asker: string
+  course: string
+  noteTitle: string
+  time: string
+  rounds: number
+  answer: string
+  sources: QaSource[]
+}
+
+export const qaRecords = reactive<QaRecord[]>([
+  {
+    id: 'q1', question: '泰勒公式里的佩亚诺余项和拉格朗日余项到底什么时候用哪个？', asker: '林小智',
+    course: '高等数学', noteTitle: '第12讲 泰勒展开与级数', time: '2026-10-11 20:14', rounds: 3,
+    answer: '求极限、判断局部性质用佩亚诺余项（只需展开到足够阶数）；做误差估计、证明不等式用拉格朗日余项（需要精确的余项表达）。课堂录音 03:24 起老师结合例题说明了两种余项的典型题型。',
+    sources: [{ type: '录音', label: '录音 03:24' }, { type: '板书', label: '板书 P2' }],
+  },
+  {
+    id: 'q2', question: '为什么「阻塞→就绪」是被动转换？', asker: '陈雨桐', course: '操作系统',
+    noteTitle: '第5讲 进程与线程', time: '2026-10-11 21:02', rounds: 1,
+    answer: '阻塞态的进程自身无法恢复运行，必须等待外部事件（如 I/O 完成、被唤醒）由其他进程或内核将其转为就绪态；而「运行→阻塞」是进程主动发起系统调用的结果。',
+    sources: [{ type: '录音', label: '录音 12:40' }],
+  },
+  {
+    id: 'q3', question: '由先序和中序序列还原二叉树的步骤是什么？', asker: '王梓萌', course: '数据结构',
+    noteTitle: '第8讲 二叉树与遍历', time: '2026-10-12 09:18', rounds: 2,
+    answer: '先序序列第一个元素为根；在中序序列中定位根，左侧为左子树、右侧为右子树；再对左右子树递归执行。板书 P4 给出了完整示例。',
+    sources: [{ type: '板书', label: '板书 P4' }, { type: '录音', label: '录音 27:05' }],
+  },
+  {
+    id: 'q4', question: 'Dijkstra 算法遇到负权边为什么会出错？', asker: '李思远', course: '数据结构',
+    noteTitle: '第9讲 图与最短路径', time: '2026-10-12 10:44', rounds: 2,
+    answer: 'Dijkstra 依赖「已确定的最短路径不会再变更」这一贪心前提；负权边可能使后加入的路径更短，破坏该前提，导致结果错误。此时应改用 Floyd 或 Bellman-Ford。',
+    sources: [{ type: '录音', label: '录音 31:12' }],
+  },
+  {
+    id: 'q5', question: '全微分存在和偏导数存在是什么关系？', asker: '周子航', course: '高等数学',
+    noteTitle: '第13讲 多元函数微分', time: '2026-10-12 12:03', rounds: 1,
+    answer: '偏导数存在是全微分存在的必要条件而非充分条件；偏导连续才能推出可微。注意这与一元函数「可导即可微」的结论不同。',
+    sources: [{ type: '板书', label: '板书 P1' }, { type: '录音', label: '录音 08:56' }],
+  },
+  {
+    id: 'q6', question: '用户级线程和内核级线程在调度上有什么区别？', asker: '吴佳琪', course: '操作系统',
+    noteTitle: '第5讲 进程与线程', time: '2026-10-12 14:27', rounds: 2,
+    answer: '用户级线程对内核透明，调度以进程为单位，一个线程阻塞会阻塞整个进程；内核级线程由内核直接调度，线程阻塞不影响同进程其他线程，但切换开销更大。',
+    sources: [{ type: '录音', label: '录音 22:18' }, { type: '板书', label: '板书 P3' }],
+  },
+  {
+    id: 'q7', question: '交错级数用莱布尼茨判别法需要注意什么？', asker: '陈雨桐', course: '高等数学',
+    noteTitle: '第12讲 泰勒展开与级数', time: '2026-10-12 16:51', rounds: 1,
+    answer: '需验证两项：通项绝对值单调递减且趋于 0。两个条件缺一不可，单调性常通过对 uₙ 求导或作差来验证。',
+    sources: [{ type: '录音', label: '录音 35:44' }],
+  },
+  {
+    id: 'q8', question: '完全二叉树用顺序存储为什么不会浪费空间？', asker: '林小智', course: '数据结构',
+    noteTitle: '第8讲 二叉树与遍历', time: '2026-10-12 18:22', rounds: 1,
+    answer: '完全二叉树结点按层序连续编号，父与孩子下标满足 i/2、2i、2i+1 的关系，编号正好占满数组前 n 个位置，因此顺序存储没有空洞。',
+    sources: [{ type: '板书', label: '板书 P5' }],
+  },
+])
+
+// ---------- 题库（对应用户端「自创题练习 / 错题本」） ----------
+export type QuizType = '单选' | '多选' | '不定项' | '简答'
+
+export interface QuizItem {
+  id: string
+  course: string
+  chapter: string
+  type: QuizType
+  stem: string
+  options?: string[]
+  answer: string
+  uploader: string
+  createdAt: string
+}
+
+export const quizItems = reactive<QuizItem[]>([
+  { id: 'z1', course: '高等数学', chapter: '第12讲 级数', type: '单选', stem: '下列关于泰勒公式余项的说法正确的是：', options: ['佩亚诺余项可用于误差的定量估计', '拉格朗日余项给出了余项的精确表达', '两种余项完全等价', '余项阶数越高展开式越短'], answer: 'B', uploader: '林小智', createdAt: '2026-10-11' },
+  { id: 'z2', course: '高等数学', chapter: '第12讲 级数', type: '多选', stem: '下列级数中收敛的有：', options: ['Σ (-1)ⁿ/n', 'Σ 1/n', 'Σ 1/n²', 'Σ (-1)ⁿ/√n'], answer: 'ACD', uploader: '陈雨桐', createdAt: '2026-10-11' },
+  { id: 'z3', course: '高等数学', chapter: '第12讲 级数', type: '不定项', stem: '关于麦克劳林展开，下列说法成立的有：', options: ['e^x 展开式中各项系数为 1/n!', 'sin x 展开式只含奇数次幂', 'ln(1+x) 在 x=-1 处也收敛', '展开阶数越高近似误差越小（收敛域内）'], answer: 'ABD', uploader: '林小智', createdAt: '2026-10-12' },
+  { id: 'z4', course: '操作系统', chapter: '第5讲 进程与线程', type: '单选', stem: '进程从运行态转为阻塞态的原因是：', options: ['时间片用完', '进程主动请求 I/O', '高优先级进程到达', '进程执行结束'], answer: 'B', uploader: '王梓萌', createdAt: '2026-10-11' },
+  { id: 'z5', course: '操作系统', chapter: '第5讲 进程与线程', type: '简答', stem: '简述进程与线程的主要区别。', answer: '进程是资源分配的基本单位，拥有独立地址空间；线程是调度执行的基本单位，同进程内线程共享资源但拥有独立栈与寄存器上下文；线程切换开销小于进程切换。', uploader: '陈雨桐', createdAt: '2026-10-11' },
+  { id: 'z6', course: '操作系统', chapter: '第6讲 虚拟内存', type: '单选', stem: 'LRU 页面置换算法淘汰的是：', options: ['最早进入内存的页面', '最长时间未被访问的页面', '未来最长时间不使用的页面', '访问次数最少的页面'], answer: 'B', uploader: '李思远', createdAt: '2026-10-12' },
+  { id: 'z7', course: '数据结构', chapter: '第8讲 二叉树', type: '单选', stem: '已知先序 ABDC、中序 BDAC，则后序序列为：', options: ['DBCA', 'DBAC', 'DCBA', 'BCDA'], answer: 'A', uploader: '周子航', createdAt: '2026-10-12' },
+  { id: 'z8', course: '数据结构', chapter: '第8讲 二叉树', type: '多选', stem: '下列遍历中，借助栈实现非递归算法的有：', options: ['先序遍历', '中序遍历', '后序遍历', '层序遍历'], answer: 'ABC', uploader: '林小智', createdAt: '2026-10-12' },
+  { id: 'z9', course: '数据结构', chapter: '第9讲 图', type: '不定项', stem: '关于最短路径算法，下列说法正确的有：', options: ['Dijkstra 适用于带负权边的图', 'Floyd 可求任意两顶点间最短路径', 'Floyd 的时间复杂度为 O(n³)', 'BFS 可求无权图的最短路径'], answer: 'BCD', uploader: '吴佳琪', createdAt: '2026-10-12' },
+  { id: 'z10', course: '高等数学', chapter: '第13讲 多元微分', type: '简答', stem: '举例说明「偏导数存在但不能推出连续」。', answer: '如 f(x,y)=xy/(x²+y²)（原点处定义为 0），在原点处 f_x、f_y 均存在且为 0，但 f 沿 y=x 趋于原点极限为 1/2 ≠ 0，故不连续。', uploader: '陈雨桐', createdAt: '2026-10-12' },
+])
+
+// ---------- 问题反馈（对应用户端「问题反馈」：标题 + 详细描述 + 可选截图） ----------
+export type FeedbackStatus = '待处理' | '已处理'
+
+export interface FeedbackItem {
+  id: string
+  user: string
+  title: string // 用户端填写的标题
+  content: string // 用户端填写的详细描述
+  images: string[] // 用户上传的截图（可为空）
+  contact: string
+  time: string
+  status: FeedbackStatus
+}
+
+/** 演示用截图：以 SVG data URI 模拟用户上传的问题截图（本地可渲染、无外部依赖） */
+function demoShot(title: string, lines: string[]): string {
+  const text = lines
+    .map((t, i) => `<text x="28" y="${104 + i * 34}" font-family="sans-serif" font-size="14" fill="#5b6472">${t}</text>`)
+    .join('')
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">` +
+    `<rect width="640" height="360" fill="#eef0f3"/>` +
+    `<rect x="1" y="1" width="638" height="42" fill="#ffffff" stroke="#e3e5ea"/>` +
+    `<circle cx="22" cy="22" r="5" fill="#f87171"/><circle cx="40" cy="22" r="5" fill="#fbbf24"/><circle cx="58" cy="22" r="5" fill="#34d399"/>` +
+    `<text x="80" y="27" font-family="sans-serif" font-size="13" fill="#8a919e">${title}</text>` +
+    `<rect x="1" y="44" width="638" height="315" fill="#ffffff" stroke="#e3e5ea"/>${text}</svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+export const feedbacks = reactive<FeedbackItem[]>([
+  {
+    id: 'f1', user: '李思远', title: '导出的纪要 PDF 里数学公式乱码',
+    content: '导出的纪要 PDF 里数学公式显示乱码，Markdown 导出正常，麻烦排查一下。\n复现步骤：打开「第12讲 级数」纪要 → 右上角导出 → 选择 PDF。期望公式正常渲染为 LaTeX 排版。',
+    images: [demoShot('智学纪要 - 导出预览.pdf', ['积分公式：∫ f(x)dx 显示为 ###FORMULA_ERROR###', '泰勒展开一行整体缺失，仅剩占位符。'])],
+    contact: 'lsy@zhiyuan.ai', time: '2026-10-12 09:12', status: '待处理',
+  },
+  {
+    id: 'f2', user: '陈雨桐', title: '希望录音转写能边处理边预览',
+    content: '希望上传录音后能边处理边预览转写文字，不用等纪要全部生成完。一节 90 分钟的课要白等十几分钟，体验不够好。',
+    images: [],
+    contact: 'chyt@zhiyuan.ai', time: '2026-10-12 10:05', status: '待处理',
+  },
+  {
+    id: 'f3', user: '林小智', title: '「第12讲 泰勒展开与级数」纪要内容有误',
+    content: '「第12讲 泰勒展开与级数」纪要里把莱布尼茨判别法的条件写成了「单调递增」，应为单调递减。请核对原始录音对应段落并修正。',
+    images: [],
+    contact: 'linxz@zhiyuan.ai', time: '2026-10-11 21:40', status: '已处理',
+  },
+  {
+    id: 'f4', user: '吴佳琪', title: '错题本希望支持按章节筛选组卷',
+    content: '错题本希望能按章节筛选并针对薄弱章节重新组卷练习，目前只能按课程整体查看，复习时定位薄弱点效率低。',
+    images: [],
+    contact: 'wjq@zhiyuan.ai', time: '2026-10-10 18:22', status: '已处理',
+  },
+  {
+    id: 'f5', user: '王梓萌', title: '上传超过 20 分钟的视频提示失败',
+    content: '上传超过 20 分钟的课堂视频会提示失败，错误信息只有「处理异常」，希望能提示更具体（如超出时长限制 / 格式不支持）。',
+    images: [demoShot('智学纪要 - 上传课堂视频', ['上传失败：处理异常', '文件：高数第12讲.mp4（约 25 分钟）', '请稍后重试或联系管理员。'])],
+    contact: 'wzmm@zhiyuan.ai', time: '2026-10-12 08:47', status: '待处理',
+  },
+  {
+    id: 'f6', user: '周子航', title: '纪要数据是否会用于模型训练',
+    content: '想了解一下纪要数据会不会被用于模型训练，希望给个明确说明。涉及课堂录音和笔记，比较关心数据隐私。',
+    images: [],
+    contact: 'zzh@zhiyuan.ai', time: '2026-10-09 15:36', status: '已处理',
+  },
+])
+
+export function removeNote(id: string) {
+  const i = notes.findIndex((n) => n.id === id)
+  if (i >= 0) notes.splice(i, 1)
+}
+
+export function resolveFeedback(id: string) {
+  const f = feedbacks.find((x) => x.id === id)
+  if (f) f.status = '已处理'
+}
+
+export const pendingFeedbackCount = () => feedbacks.filter((f) => f.status === '待处理').length
+
+// ---------- 所属课程表（与用户端 store/study.ts 的课程 API 同构） ----------
+// courseList 保存用户端的「原始课程名」；管理端的改名是别名（alias），仅影响管理端显示：
+// 例：用户端建了「高等数学12」，管理端改名为「高等数学」后，相关纪要 / 问答在管理端
+// 全部归入「高等数学」显示，用户端仍显示「高等数学12」，原始数据不变。
+export const courseList = ref<string[]>([...new Set(notes.map((n) => n.course))])
+
+/** 原始课程名 → 管理端显示名（未改名的不在表内） */
+export const courseAlias = ref<Record<string, string>>({})
+
+/** 管理端显示名：有别名用别名，否则显示原始名 */
+export function courseDisplay(name: string): string {
+  return courseAlias.value[name] || name
+}
+
+/** 管理端下拉中的课程（显示名去重，多个原始名归并到同一显示名时合并为一项） */
+export const displayCourses = computed(() => {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const c of courseList.value) {
+    const d = courseAlias.value[c] || c
+    if (!seen.has(d)) {
+      seen.add(d)
+      out.push(d)
+    }
+  }
+  return out
+})
+
+/** 归入某显示名的全部原始课程名（供删除统计、弹窗展示用） */
+export function originalsOf(display: string): string[] {
+  return courseList.value.filter((c) => (courseAlias.value[c] || c) === display)
+}
+
+/** 新增课程：空名 / 重名返回 false（演示环境一般由用户端数据驱动，保留 API 以对齐用户端） */
+export function addCourse(name: string): boolean {
+  const trimmed = name.trim()
+  if (!trimmed || courseList.value.includes(trimmed)) return false
+  courseList.value.push(trimmed)
+  return true
+}
+
+/**
+ * 管理端重命名（别名合并）：只改管理端显示名，用户端名称与原始数据不变；
+ * 新显示名与现有课程相同则合并显示。返回是否生效。
+ */
+export function renameCourseDisplay(oldDisplay: string, newDisplay: string): boolean {
+  const trimmed = newDisplay.trim()
+  if (!trimmed || trimmed === oldDisplay) return false
+  let hit = false
+  for (const c of courseList.value) {
+    if ((courseAlias.value[c] || c) === oldDisplay) {
+      courseAlias.value[c] = trimmed
+      hit = true
+    }
+  }
+  return hit
+}
+
+/**
+ * 删除课程（按管理端显示名）：归入该显示名的全部课程连同名下纪要、问答记录一并移除
+ * （仅影响管理端演示数据，不可恢复，调用方需先弹窗确认后果）
+ */
+export function removeCourseDisplay(display: string) {
+  const originals = originalsOf(display)
+  courseList.value = courseList.value.filter((c) => !originals.includes(c))
+  for (const o of originals) delete courseAlias.value[o]
+  for (let i = notes.length - 1; i >= 0; i--) {
+    if (originals.includes(notes[i]?.course ?? '')) notes.splice(i, 1)
+  }
+  for (let i = qaRecords.length - 1; i >= 0; i--) {
+    if (originals.includes(qaRecords[i]?.course ?? '')) qaRecords.splice(i, 1)
+  }
+}
+
+// ---------- 看板统计 ----------
+export const weeklyQa = [
+  { day: '10-06', count: 86 },
+  { day: '10-07', count: 102 },
+  { day: '10-08', count: 95 },
+  { day: '10-09', count: 130 },
+  { day: '10-10', count: 158 },
+  { day: '10-11', count: 121 },
+  { day: '10-12', count: 143 },
+]
+
+export const recentEvents = [
+  { time: '10-12 11:02', text: '「第13讲 多元函数微分」纪要生成完成（上传者：周子航）' },
+  { time: '10-12 10:44', text: '用户「李思远」围绕「第9讲 图与最短路径」完成 2 轮追问' },
+  { time: '10-12 09:41', text: '新用户「郑博文」完成注册' },
+  { time: '10-12 08:47', text: '用户「王梓萌」提交功能异常反馈：长视频上传失败' },
+  { time: '10-11 21:40', text: '用户「林小智」提交内容纠错反馈：莱布尼茨判别法表述有误' },
+  { time: '10-11 15:40', text: '「第8讲 二叉树与遍历」纪要生成完成（上传者：林小智）' },
+]
