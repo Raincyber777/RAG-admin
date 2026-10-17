@@ -5,9 +5,16 @@
  */
 import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import { feedbacks, resolveFeedback, type FeedbackItem } from '@/store/admin'
 
-const filter = ref<'all' | '待处理' | '已处理'>('all')
+// 状态筛选：可输入过滤的下拉框（输入关键字可实时过滤选项）
+const filter = ref('all') // 'all' | '待处理' | '已处理'
+const filterOptions: SelectOption[] = [
+  { label: '全部', value: 'all' },
+  { label: '待处理', value: '待处理' },
+  { label: '已处理', value: '已处理' },
+]
 
 const filtered = computed(() =>
   feedbacks.filter((f) => filter.value === 'all' || f.status === filter.value),
@@ -45,11 +52,22 @@ function setPageSize(s: number) {
 const detail = ref<FeedbackItem | null>(null)
 const preview = ref('')
 
-function markDone(id: string) {
-  resolveFeedback(id)
+const opError = ref('')
+const resolvingId = ref('')
+async function markDone(id: string) {
+  if (resolvingId.value) return
+  resolvingId.value = id
+  opError.value = ''
+  try {
+    await resolveFeedback(id)
+  } catch (e) {
+    opError.value = e instanceof Error ? e.message : '操作失败，请稍后重试'
+  } finally {
+    resolvingId.value = ''
+  }
 }
-function markDoneInModal() {
-  if (detail.value) markDone(detail.value.id)
+async function markDoneInModal() {
+  if (detail.value) await markDone(detail.value.id)
 }
 </script>
 
@@ -63,12 +81,10 @@ function markDoneInModal() {
     </header>
 
     <div class="toolbar">
-      <div class="seg-tabs">
-        <button class="seg-tab" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部（{{ feedbacks.length }}）</button>
-        <button class="seg-tab" :class="{ active: filter === '待处理' }" @click="filter = '待处理'">待处理（{{ pendingCount }}）</button>
-        <button class="seg-tab" :class="{ active: filter === '已处理' }" @click="filter = '已处理'">已处理（{{ feedbacks.length - pendingCount }}）</button>
-      </div>
+      <AppSelect v-model="filter" :options="filterOptions" class="status-select" aria-label="按处理状态筛选" />
     </div>
+
+    <p v-if="opError" class="op-err"><AppIcon name="alert" :size="13" /> {{ opError }}</p>
 
     <div class="fb-grid">
       <div
@@ -92,8 +108,8 @@ function markDoneInModal() {
             <span class="meta-item"><AppIcon name="clock" :size="12" /> {{ f.time }}</span>
             <span v-if="f.images.length" class="meta-item"><AppIcon name="image" :size="12" /> {{ f.images.length }} 张截图</span>
           </div>
-          <button v-if="f.status === '待处理'" class="btn btn-primary btn-sm" @click.stop="markDone(f.id)">
-            <AppIcon name="check" :size="13" /> 标记已处理
+          <button v-if="f.status === '待处理'" class="btn btn-primary btn-sm" :disabled="resolvingId === f.id" @click.stop="markDone(f.id)">
+            <AppIcon name="check" :size="13" /> {{ resolvingId === f.id ? '处理中…' : '标记已处理' }}
           </button>
         </div>
       </div>
@@ -174,6 +190,14 @@ function markDoneInModal() {
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; }
 
 .toolbar { margin-bottom: 14px; }
+.status-select { width: 190px; max-width: 100%; }
+
+.op-err {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--tint-rose); color: #d92d20;
+  font-size: 13px; font-weight: 500; border-radius: var(--radius-md);
+  padding: 9px 13px; margin-bottom: 12px;
+}
 
 .fb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fb-card { display: flex; flex-direction: column; }

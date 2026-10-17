@@ -49,6 +49,8 @@ router.beforeEach((to) => {
       n: typeof to.query.n === 'string' ? to.query.n : undefined,
       e: typeof to.query.e === 'string' ? to.query.e : undefined,
       r: typeof to.query.r === 'string' ? to.query.r : undefined,
+      t: typeof to.query.t === 'string' ? to.query.t : undefined,
+      rt: typeof to.query.rt === 'string' ? to.query.rt : undefined,
     })
     return { path: to.path, query: {}, replace: true }
   }

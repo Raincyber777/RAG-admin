@@ -1,10 +1,14 @@
 <script setup lang="ts">
 /**
  * 使用说明（管理端）：分权模型说明 + 各板块导览 + 使用技巧 + 常见问题
+ * 使用技巧 / 常见问题来自后端配置（工作台维护），分页展示；库为空时回退内置默认
  */
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import FaqModal from '@/components/FaqModal.vue'
 import { isSuper } from '@/store/auth'
+import { faqs as storeFaqs } from '@/store/faq'
+import { tips as storeTips } from '@/store/tips'
 
 // ---------- 分权模型 ----------
 const roles = [
@@ -34,42 +38,81 @@ const boards = [
   { icon: 'sliders', tint: 'bo-mint', name: '个人设置', desc: '维护头像、用户名、手机号、邮箱与密码，修改即时同步侧边栏', note: '' },
 ]
 
-// ---------- 使用技巧 ----------
-const tips = [
-  { icon: 'info', text: '演示环境下手机号 / 邮箱验证码统一为 123456；重置密码至少 8 位。' },
-  { icon: 'lock', text: '停用账号只禁止登录、不删除数据，随时可以恢复；操作前会弹出二次确认。' },
-  { icon: 'link', text: '管理员账号两端通用：在用户端登录会先进入管理端，工作台可一键回到用户端。' },
-  { icon: 'users', text: '用户名修改后，欢迎语的称呼、侧边栏卡片会同步更新（重新登录同样生效）。' },
-  { icon: 'eye', text: '看板图表与动态为演示数据，接入后端后替换为统计接口即可，页面结构不变。' },
+// ---------- 使用技巧（工作台维护；分页展示） ----------
+const DEFAULT_TIPS = [
+  '演示环境下手机号 / 邮箱验证码统一为 123456；重置密码至少 8 位。',
+  '停用账号只禁止登录、不删除数据，随时可以恢复；操作前会弹出二次确认。',
+  '管理员账号两端通用：在用户端登录会先进入管理端，工作台可一键回到用户端。',
+  '用户名修改后，欢迎语的称呼、侧边栏卡片会同步更新（重新登录同样生效）。',
+  '看板图表与动态为演示数据，接入后端后替换为统计接口即可，页面结构不变。',
 ]
+const TIP_ICONS = ['info', 'lock', 'link', 'users', 'eye']
+/** 按技巧的全局序号循环取图标（后端只存文本，图标为展示层装饰） */
+function tipIcon(globalIndex: number) {
+  return TIP_ICONS[globalIndex % TIP_ICONS.length]
+}
+const tipItems = computed(() => (storeTips.admin.length ? storeTips.admin.map((t) => t.text) : DEFAULT_TIPS))
+// 关键词搜索：过滤后分页（输入或清空关键词时回到第 1 页）
+const tipQuery = ref('')
+const filteredTips = computed(() => {
+  const k = tipQuery.value.trim().toLowerCase()
+  if (!k) return tipItems.value
+  return tipItems.value.filter((t) => t.toLowerCase().includes(k))
+})
+const tipPage = ref(1)
+const TIP_PAGE_SIZE = 5
+const tipTotalPages = computed(() => Math.max(1, Math.ceil(filteredTips.value.length / TIP_PAGE_SIZE)))
+const tipSafePage = computed(() => Math.min(tipPage.value, tipTotalPages.value))
+const tipsPaged = computed(() =>
+  filteredTips.value.slice((tipSafePage.value - 1) * TIP_PAGE_SIZE, tipSafePage.value * TIP_PAGE_SIZE),
+)
+watch(tipQuery, () => {
+  tipPage.value = 1
+})
 
-// ---------- 常见问题 ----------
-const faqs = ref([
+// ---------- 常见问题：工作台维护的管理端 FAQ（store 由布局挂载时拉取；后端不可用时本地兜底） ----------
+const DEFAULT_FAQS = [
   {
+    id: 'd1',
     q: '普通用户账号可以登录管理端吗？',
     a: '不可以。两端共用用户端首页的登录表单：普通用户账号登录后只会进入用户端；管理员 / 超级管理员账号登录后先进入管理端工作台，可在工作台一键进入用户端。',
-    open: false,
   },
   {
+    id: 'd2',
     q: '管理员账号由谁创建？密码忘了怎么办？',
     a: '管理员账号统一由超级管理员在「账号管理」页创建（切换到「管理员」分类或点击右上角「新建管理员账号」），初始密码由超管线下告知；忘记密码时联系超级管理员重置，重置后可自行在个人设置中修改。',
-    open: false,
   },
   {
+    id: 'd3',
     q: '停用管理员 / 用户账号会影响他们的数据吗？',
     a: '不会。停用仅禁止登录，账号名下的纪要、问答、题库数据全部保留；恢复后一切如常。删除类操作（如删除课堂纪要）才不可恢复，需谨慎确认。',
-    open: false,
   },
   {
+    id: 'd4',
     q: '数据看板上的数字是真实的吗？',
-    a: '当前为演示环境，看板指标、热门追问词与最新动态均来自前端演示数据：热门追问词实时统计自问答记录文本，最新动态每 3.5 秒轮播一次。接入后端后由统计接口提供。',
-    open: false,
+    a: '看板核心指标实时来自后端统计接口；热门追问词与最新动态为演示数据。常见问题均可在工作台维护并同步到本页。',
   },
-])
-function toggleFaq(i: number) {
-  const f = faqs.value[i]
-  if (f) f.open = !f.open
-}
+]
+const faqItemsAll = computed(() => (storeFaqs.admin.length ? storeFaqs.admin : DEFAULT_FAQS))
+/** 当前查看的 FAQ（点击列表项弹窗展示完整内容；null 表示关闭） */
+const faqView = ref<{ q: string; a: string } | null>(null)
+// 关键词搜索：匹配问题与解答（过滤后分页，输入或清空关键词时回到第 1 页）
+const faqQuery = ref('')
+const filteredFaqs = computed(() => {
+  const k = faqQuery.value.trim().toLowerCase()
+  if (!k) return faqItemsAll.value
+  return faqItemsAll.value.filter((f) => (f.q + f.a).toLowerCase().includes(k))
+})
+const faqPage = ref(1)
+const FAQ_PAGE_SIZE = 5
+const faqTotalPages = computed(() => Math.max(1, Math.ceil(filteredFaqs.value.length / FAQ_PAGE_SIZE)))
+const faqSafePage = computed(() => Math.min(faqPage.value, faqTotalPages.value))
+const faqItems = computed(() =>
+  filteredFaqs.value.slice((faqSafePage.value - 1) * FAQ_PAGE_SIZE, faqSafePage.value * FAQ_PAGE_SIZE),
+)
+watch(faqQuery, () => {
+  faqPage.value = 1
+})
 </script>
 
 <template>
@@ -114,29 +157,71 @@ function toggleFaq(i: number) {
     <!-- 使用技巧 -->
     <div class="group-head">
       <h2 class="group-title">使用技巧</h2>
-      <span class="group-sub">5 个要点</span>
+      <span class="group-sub">{{ tipItems.length }} 个要点</span>
+    </div>
+    <div class="search-box">
+      <AppIcon name="search" :size="15" />
+      <input v-model="tipQuery" class="search-input" type="text" placeholder="搜索使用技巧关键词" />
+      <button v-if="tipQuery" class="search-clear" aria-label="清空技巧搜索" @click="tipQuery = ''">
+        <AppIcon name="x" :size="13" />
+      </button>
     </div>
     <div class="tip-list">
-      <div v-for="t in tips" :key="t.text" class="tip-row">
-        <span class="tip-ico"><AppIcon :name="t.icon" :size="14" /></span>
-        <span>{{ t.text }}</span>
+      <div v-for="(t, i) in tipsPaged" :key="t" class="tip-row">
+        <span class="tip-ico"><AppIcon :name="tipIcon((tipSafePage - 1) * TIP_PAGE_SIZE + i)" :size="14" /></span>
+        <span>{{ t }}</span>
+      </div>
+      <p v-if="!filteredTips.length" class="empty-tip">未找到与「{{ tipQuery.trim() }}」相关的使用技巧，换个关键词试试</p>
+    </div>
+    <div v-if="filteredTips.length" class="pager">
+      <span class="pager-info">共 {{ filteredTips.length }} 条</span>
+      <div class="pager-nav">
+        <button class="pager-btn" :disabled="tipSafePage <= 1" aria-label="上一页" @click="tipPage = tipSafePage - 1">
+          <AppIcon name="chevron-left" :size="14" />
+        </button>
+        <span class="pager-page">第 {{ tipSafePage }} / {{ tipTotalPages }} 页</span>
+        <button class="pager-btn" :disabled="tipSafePage >= tipTotalPages" aria-label="下一页" @click="tipPage = tipSafePage + 1">
+          <AppIcon name="chevron-right" :size="14" />
+        </button>
       </div>
     </div>
 
     <!-- 常见问题 -->
     <div class="group-head">
       <h2 class="group-title">常见问题</h2>
-      <span class="group-sub">4 个高频疑问</span>
+      <span class="group-sub">{{ faqItemsAll.length }} 个高频疑问</span>
+    </div>
+    <div class="search-box faq-search">
+      <AppIcon name="search" :size="15" />
+      <input v-model="faqQuery" class="search-input" type="text" placeholder="搜索常见问题关键词" />
+      <button v-if="faqQuery" class="search-clear" aria-label="清空问题搜索" @click="faqQuery = ''">
+        <AppIcon name="x" :size="13" />
+      </button>
     </div>
     <div class="faq-list">
-      <div v-for="(f, i) in faqs" :key="f.q" class="faq-item">
-        <button class="faq-q" :class="{ open: f.open }" @click="toggleFaq(i)">
-          <span class="faq-ico"><AppIcon name="plus" :size="14" /></span>
+      <div v-for="f in faqItems" :key="f.id" class="faq-item">
+        <button class="faq-q" @click="faqView = f">
+          <span class="faq-ico"><AppIcon name="chevron-right" :size="14" /></span>
           <span>{{ f.q }}</span>
         </button>
-        <p v-if="f.open" class="faq-a">{{ f.a }}</p>
+      </div>
+      <p v-if="!filteredFaqs.length" class="empty-tip">未找到与「{{ faqQuery.trim() }}」相关的常见问题，换个关键词试试</p>
+    </div>
+    <div v-if="filteredFaqs.length" class="pager">
+      <span class="pager-info">共 {{ filteredFaqs.length }} 条</span>
+      <div class="pager-nav">
+        <button class="pager-btn" :disabled="faqSafePage <= 1" aria-label="上一页" @click="faqPage = faqSafePage - 1">
+          <AppIcon name="chevron-left" :size="14" />
+        </button>
+        <span class="pager-page">第 {{ faqSafePage }} / {{ faqTotalPages }} 页</span>
+        <button class="pager-btn" :disabled="faqSafePage >= faqTotalPages" aria-label="下一页" @click="faqPage = faqSafePage + 1">
+          <AppIcon name="chevron-right" :size="14" />
+        </button>
       </div>
     </div>
+
+    <!-- 常见问题详情弹窗 -->
+    <FaqModal :faq="faqView" @close="faqView = null" />
   </div>
 </template>
 
@@ -175,12 +260,48 @@ function toggleFaq(i: number) {
 
 /* 技巧 */
 .tip-list { display: flex; flex-direction: column; gap: 8px; }
+
+/* 搜索框（使用技巧 / 常见问题共用） */
+.search-box {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius-md);
+  background: var(--canvas); padding: 0 12px; height: 38px;
+  color: var(--stone); margin-bottom: 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint-lavender); }
+.search-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-family: inherit; font-size: 13.5px; color: var(--ink);
+}
+.search-input::placeholder { color: var(--stone); }
+.search-clear {
+  border: none; background: transparent; color: var(--stone); cursor: pointer;
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); flex-shrink: 0;
+}
+.search-clear:hover { color: var(--ink); background: var(--surface-soft); }
+.empty-tip { text-align: center; color: var(--stone); font-size: 13px; padding: 20px 0; }
+.faq-list .empty-tip { border-top: 1px solid var(--hairline); }
 .tip-row {
   display: flex; align-items: flex-start; gap: 10px;
   background: var(--surface-soft); border-radius: var(--radius-md);
   padding: 11px 14px; font-size: 13px; color: var(--ink); line-height: 1.65;
 }
 .tip-ico { color: var(--primary); flex-shrink: 0; margin-top: 2px; display: flex; }
+
+/* 分页条（使用技巧 / 常见问题） */
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.pager-info { font-size: 12.5px; color: var(--slate); margin-right: auto; }
+.pager-nav { display: flex; align-items: center; gap: 8px; }
+.pager-btn {
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  background: var(--canvas); border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm);
+  color: var(--slate); cursor: pointer; transition: all 0.15s ease;
+}
+.pager-btn:hover:not(:disabled) { border-color: var(--steel); color: var(--ink); }
+.pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pager-page { font-size: 12.5px; color: var(--slate); min-width: 72px; text-align: center; }
 
 /* FAQ */
 .faq-list { border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; background: var(--canvas); }
@@ -192,8 +313,7 @@ function toggleFaq(i: number) {
 }
 .faq-q:hover { background: var(--surface-soft); }
 .faq-ico { display: flex; color: var(--stone); transition: transform 0.18s ease, color 0.18s ease; flex-shrink: 0; }
-.faq-q.open .faq-ico { transform: rotate(45deg); color: var(--primary); }
-.faq-a { padding: 0 18px 15px 42px; font-size: 13px; color: var(--slate); line-height: 1.75; }
+.faq-q:hover .faq-ico { color: var(--primary); transform: translateX(2px); }
 
 @media (max-width: 900px) {
   .page { padding: 20px 16px; }

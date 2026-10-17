@@ -31,12 +31,24 @@ const delNoteCount = computed(() => notes.filter((n) => deleteOriginals.value.in
 const delQaCount = computed(() => qaRecords.filter((q) => deleteOriginals.value.includes(q.course)).length)
 function askDelete(name: string) {
   deleteTarget.value = name
+  deleteError.value = ''
 }
-function confirmDelete() {
+const deleteError = ref('')
+const deleting = ref(false)
+async function confirmDelete() {
   const name = deleteTarget.value
-  if (name) removeCourseDisplay(name)
-  if (props.modelValue === name) emit('update:modelValue', '全部')
-  deleteTarget.value = ''
+  if (!name || deleting.value) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await removeCourseDisplay(name)
+    if (props.modelValue === name) emit('update:modelValue', '全部')
+    deleteTarget.value = ''
+  } catch (e) {
+    deleteError.value = e instanceof Error ? e.message : '删除失败，请确认后端已启动'
+  } finally {
+    deleting.value = false
+  }
 }
 
 // ---------- 重命名课程：仅管理端生效的别名合并 ----------
@@ -84,7 +96,7 @@ function confirmRename() {
       aria-label="按课程筛选"
       deletable
       renamable
-      manage-exception="全部"
+      manage-except="全部"
       @update:model-value="emit('update:modelValue', $event)"
       @delete="askDelete"
       @rename="askRename"
@@ -102,9 +114,10 @@ function confirmRename() {
           该显示名下合并了用户端原名称：{{ deleteOriginals.filter((o) => o !== deleteTarget).join('、') }}
           或「{{ deleteTarget }}」本身。
         </p>
+        <p v-if="deleteError" class="modal-sub hint-err">{{ deleteError }}</p>
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="deleteTarget = ''">取消</button>
-          <button class="btn btn-danger" @click="confirmDelete">确认删除</button>
+          <button class="btn btn-danger" :disabled="deleting" @click="confirmDelete">确认删除</button>
         </div>
       </div>
     </div>
@@ -153,4 +166,5 @@ function confirmRename() {
   font-size: 12.5px; color: var(--stone); line-height: 1.7;
   background: var(--surface-soft); border-radius: var(--radius-md); padding: 9px 12px;
 }
+.hint-err { color: #d92d20; }
 </style>

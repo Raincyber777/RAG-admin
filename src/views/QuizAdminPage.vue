@@ -5,14 +5,19 @@
  */
 import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import CourseSelect from '@/components/CourseSelect.vue'
 import { quizItems, courseDisplay, type QuizItem, type QuizType } from '@/store/admin'
 
 const keyword = ref('')
 const courseFilter = ref('全部')
-const typeFilter = ref<'全部' | QuizType>('全部')
+const typeFilter = ref('全部')
 
-const types: Array<'全部' | QuizType> = ['全部', '单选', '多选', '不定项', '简答']
+// 题型筛选：可输入过滤的下拉框
+const typeOptions: SelectOption[] = [
+  { label: '全部题型', value: '全部' },
+  ...(['单选', '多选', '不定项', '简答'] as QuizType[]).map((t) => ({ label: t, value: t })),
+]
 
 const filtered = computed(() =>
   quizItems.filter((q) => {
@@ -40,15 +45,12 @@ function setPageSize(s: number) {
   page.value = 1
 }
 
-const choiceCount = quizItems.filter((q) => q.type !== '简答').length
-const simpleCount = quizItems.filter((q) => q.type === '简答').length
-const courseCount = new Set(quizItems.map((q) => q.course)).size
-const stats = [
+const stats = computed(() => [
   { label: '题目总数', value: quizItems.length },
-  { label: '选择题', value: choiceCount },
-  { label: '简答题', value: simpleCount },
-  { label: '覆盖课程', value: courseCount },
-]
+  { label: '选择题', value: quizItems.filter((q) => q.type !== '简答').length },
+  { label: '简答题', value: quizItems.filter((q) => q.type === '简答').length },
+  { label: '覆盖课程', value: new Set(quizItems.map((q) => q.course)).size },
+])
 
 const detail = ref<QuizItem | null>(null)
 const typeTag = (t: QuizType) =>
@@ -75,13 +77,7 @@ const typeTag = (t: QuizType) =>
         <input v-model="keyword" class="input" placeholder="搜索题干 / 章节 / 创建人" />
       </div>
       <div class="filters">
-        <div class="seg-tabs">
-          <button
-            v-for="t in types" :key="t"
-            class="seg-tab" :class="{ active: typeFilter === t }"
-            @click="typeFilter = t"
-          >{{ t }}</button>
-        </div>
+        <AppSelect v-model="typeFilter" :options="typeOptions" class="type-select" aria-label="按题型筛选" />
         <CourseSelect v-model="courseFilter" />
       </div>
     </div>
@@ -168,6 +164,7 @@ const typeTag = (t: QuizType) =>
 .search-ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--stone); pointer-events: none; }
 .search-box .input { padding-left: 32px; }
 .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.type-select { width: 150px; }
 
 /* 分页条 */
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; }

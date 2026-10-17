@@ -1,18 +1,19 @@
 <script setup lang="ts">
 /**
  * 账号管理：用户账号与管理员账号统一管理（由原「用户管理」「管理员账号」合并）
- * 分类筛选：全部 / 用户 / 管理员 / 启用 / 已停用；各类内新注册的账号排前
- * 「全部」视图管理员账号排在用户账号前面；「管理员」分类与新建管理员仅超级管理员可用
+ * 筛选：角色（全部/用户/管理员）与状态（全部/启用/已停用）两个可输入过滤的下拉框，选项带实时计数
+ * 「全部角色」视图管理员账号排在用户账号前面；「管理员」筛选与新建管理员仅超级管理员可用
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import {
   accounts, session, isSuper, maskPhone, maskEmail,
   createAdmin, resetPassword, toggleStatus, type Account,
 } from '@/store/auth'
 
-type Cat = 'all' | 'user' | 'admin' | 'active' | 'disabled'
-const cat = ref<Cat>('all')
+const roleCat = ref('all') // 'all' | 'user' | 'admin'
+const statusCat = ref('all') // 'all' | 'active' | 'disabled'
 const keyword = ref('')
 
 const adminCount = computed(() => accounts.filter((a) => a.role !== 'user').length)
@@ -35,25 +36,61 @@ const filtered = computed(() =>
   accounts.filter((a) => {
     // 权限：非超级管理员仅能查看用户账号
     if (!isSuper.value && a.role !== 'user') return false
-    if (cat.value === 'user' && a.role !== 'user') return false
-    if (cat.value === 'admin' && a.role === 'user') return false
-    if (cat.value === 'active' && a.status !== 'active') return false
-    if (cat.value === 'disabled' && a.status !== 'disabled') return false
+    if (roleCat.value === 'user' && a.role !== 'user') return false
+    if (roleCat.value === 'admin' && a.role === 'user') return false
+    if (statusCat.value === 'active' && a.status !== 'active') return false
+    if (statusCat.value === 'disabled' && a.status !== 'disabled') return false
     return matchKeyword(a)
   }),
 )
 
-// 各分类内新注册的排前；「全部」视图（超管）管理员账号整体排在用户账号前面
+// 「全部角色」内新注册的排前；该视图（超管）管理员账号整体排在用户账号前面
 const sorted = computed(() => {
   const arr = [...filtered.value]
   arr.sort((a, b) => {
-    if (cat.value === 'all' && isSuper.value && (a.role === 'user') !== (b.role === 'user')) {
+    if (roleCat.value === 'all' && isSuper.value && (a.role === 'user') !== (b.role === 'user')) {
       return a.role === 'user' ? 1 : -1
     }
     return b.createdAt.localeCompare(a.createdAt)
   })
   return arr
 })
+
+// 角色筛选选项（非超级管理员仅能查看用户账号，无「管理员」项）
+const roleOptions = computed<SelectOption[]>(() =>
+  isSuper.value
+    ? [
+        { label: '全部角色', value: 'all' },
+        { label: '用户', value: 'user' },
+        { label: '管理员', value: 'admin' },
+      ]
+    : [
+        { label: '全部角色', value: 'all' },
+        { label: '用户', value: 'user' },
+      ],
+)
+// 状态筛选选项
+const statusOptions = computed<SelectOption[]>(() => [
+  { label: '全部状态', value: 'all' },
+  { label: '启用', value: 'active' },
+  { label: '已停用', value: 'disabled' },
+])
+
+// ---------- 分页（每页 5 / 10 / 20 条；搜索 / 切换筛选 / 改每页条数后回到第 1 页） ----------
+const page = ref(1)
+const pageSize = ref(5)
+const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / pageSize.value)))
+const safePage = computed(() => Math.min(page.value, totalPages.value))
+const paged = computed(() =>
+  sorted.value.slice((safePage.value - 1) * pageSize.value, safePage.value * pageSize.value),
+)
+watch([keyword, roleCat, statusCat, pageSize], () => {
+  page.value = 1
+})
+function setPageSize(s: number) {
+  pageSize.value = s
+  page.value = 1
+}
 
 const isSelf = (a: Account) => session.value?.id === a.id
 const roleLabel = (a: Account) => (a.role === 'super' ? '超级管理员' : a.role === 'admin' ? '管理员' : '普通用户')
@@ -88,9 +125,9 @@ function openCreate() {
   formError.value = ''
   showCreate.value = true
 }
-function confirmCreate() {
+async function confirmCreate() {
   formError.value = ''
-  const res = createAdmin(form.value)
+  const res = await createAdmin(form.value)
   if (!res.ok) {
     formError.value = res.msg || '创建失败，请稍后重试'
     return
@@ -108,14 +145,18 @@ function openReset(a: Account) {
   resetNext.value = ''
   resetError.value = ''
 }
-function confirmReset() {
+async function confirmReset() {
   if (!resetTarget.value) return
   if (resetNext.value.length < 8) {
     resetError.value = '新密码至少需要 8 位'
     return
   }
   const name = resetTarget.value.name
-  resetPassword(resetTarget.value, resetNext.value)
+  const res = await resetPassword(resetTarget.value, resetNext.value)
+  if (!res.ok) {
+    resetError.value = res.msg || '重置失败，请稍后重试'
+    return
+  }
   resetTarget.value = null
   showTip(`已重置「${name}」的密码`)
 }
@@ -123,9 +164,16 @@ function confirmReset() {
 // ---------- 停用 / 启用（超级管理员与自己的账号不可停用） ----------
 const canToggle = (a: Account) => a.role !== 'super' && !isSelf(a)
 const toggleTarget = ref<Account | null>(null)
-function confirmToggle() {
-  if (toggleTarget.value) toggleStatus(toggleTarget.value)
+const toggleError = ref('')
+async function confirmToggle() {
+  if (!toggleTarget.value) return
+  const res = await toggleStatus(toggleTarget.value)
+  if (!res.ok) {
+    toggleError.value = res.msg || '操作失败，请稍后重试'
+    return
+  }
   toggleTarget.value = null
+  toggleError.value = ''
 }
 
 // ---------- 操作成功提示 ----------
@@ -159,15 +207,10 @@ function showTip(text: string) {
         <AppIcon name="search" :size="15" class="search-ico" />
         <input v-model="keyword" class="input" placeholder="搜索用户名 / 手机号 / 邮箱" />
       </div>
-      <div class="seg-tabs">
-        <template v-if="isSuper">
-          <button class="seg-tab" :class="{ active: cat === 'all' }" @click="cat = 'all'">全部（{{ accounts.length }}）</button>
-          <button class="seg-tab" :class="{ active: cat === 'user' }" @click="cat = 'user'">用户（{{ userCount }}）</button>
-          <button class="seg-tab" :class="{ active: cat === 'admin' }" @click="cat = 'admin'">管理员（{{ adminCount }}）</button>
-        </template>
-        <button v-else class="seg-tab" :class="{ active: cat === 'all' }" @click="cat = 'all'">全部（{{ userCount }}）</button>
-        <button class="seg-tab" :class="{ active: cat === 'active' }" @click="cat = 'active'">启用（{{ activeCount }}）</button>
-        <button class="seg-tab" :class="{ active: cat === 'disabled' }" @click="cat = 'disabled'">已停用（{{ disabledCount }}）</button>
+      <!-- 角色 / 状态筛选：可输入过滤的下拉框（输入关键字可实时过滤选项） -->
+      <div class="filter-selects">
+        <AppSelect v-model="roleCat" :options="roleOptions" class="filter-select" aria-label="按角色筛选" />
+        <AppSelect v-model="statusCat" :options="statusOptions" class="filter-select" aria-label="按状态筛选" />
       </div>
     </div>
 
@@ -190,7 +233,7 @@ function showTip(text: string) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="a in sorted" :key="a.id">
+            <tr v-for="a in paged" :key="a.id">
               <td>
                 <div class="user-cell">
                   <img v-if="a.avatar" :src="a.avatar" class="avatar avatar-sm avatar-photo" :alt="a.name + ' 的头像'" />
@@ -207,8 +250,8 @@ function showTip(text: string) {
               <td><span class="tag" :class="a.role === 'super' ? 'tag-purple' : a.role === 'admin' ? 'tag-blue' : 'tag-gray'">{{ roleLabel(a) }}</span></td>
               <td class="muted">{{ maskPhone(a.phone) }}</td>
               <td class="muted">{{ maskEmail(a.email) }}</td>
-              <td>{{ a.role === 'user' ? (a.notes ?? 0) : '—' }}</td>
-              <td>{{ a.role === 'user' ? (a.questions ?? 0) : '—' }}</td>
+              <td>{{ a.notes ?? 0 }}</td>
+              <td>{{ a.questions ?? 0 }}</td>
               <td class="muted">{{ a.createdAt }}</td>
               <td><span class="tag" :class="a.status === 'active' ? 'tag-green' : 'tag-gray'">{{ a.status === 'active' ? '正常' : '已停用' }}</span></td>
               <td class="td-actions">
@@ -230,9 +273,34 @@ function showTip(text: string) {
         </table>
       </div>
     </div>
+
+    <!-- 分页条：每页 5 / 10 / 20 条 -->
+    <div v-if="sorted.length" class="pager">
+      <span class="pager-info">共 {{ sorted.length }} 条</span>
+      <div class="pager-size">
+        <span class="pager-label">每页</span>
+        <div class="seg-tabs">
+          <button
+            v-for="s in [5, 10, 20]" :key="s"
+            class="seg-tab" :class="{ active: pageSize === s }"
+            @click="setPageSize(s)"
+          >{{ s }}</button>
+        </div>
+      </div>
+      <div class="pager-nav">
+        <button class="pager-btn" :disabled="safePage <= 1" aria-label="上一页" @click="page = safePage - 1">
+          <AppIcon name="chevron-left" :size="14" />
+        </button>
+        <span class="pager-page">第 {{ safePage }} / {{ totalPages }} 页</span>
+        <button class="pager-btn" :disabled="safePage >= totalPages" aria-label="下一页" @click="page = safePage + 1">
+          <AppIcon name="chevron-right" :size="14" />
+        </button>
+      </div>
+    </div>
+
     <p class="perm-note">
       <AppIcon name="info" :size="13" />
-      分权说明：超级管理员可管理用户与管理员账号，新注册的账号在各类中排在前面；管理员仅可管理用户账号；普通用户账号仅能登录用户端。
+      分权说明：超级管理员可管理用户与管理员账号，新注册的账号在筛选结果中排在前面；管理员仅可管理用户账号；普通用户账号仅能登录用户端。
     </p>
 
     <!-- 新建管理员弹窗 -->
@@ -292,6 +360,7 @@ function showTip(text: string) {
             ? `停用后「${toggleTarget.name}」将无法登录${toggleTarget.role === 'user' ? '用户端' : '管理端与用户端'}，账号数据保留。确定停用吗？`
             : `恢复后「${toggleTarget.name}」可重新登录正常使用。确定恢复吗？` }}
         </p>
+        <p v-if="toggleError" class="field-hint hint-err">{{ toggleError }}</p>
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="toggleTarget = null">取消</button>
           <button class="btn" :class="toggleTarget.status === 'active' ? 'btn-danger' : 'btn-primary'" @click="confirmToggle">
@@ -311,6 +380,8 @@ function showTip(text: string) {
 .search-box { position: relative; width: 300px; max-width: 100%; }
 .search-ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--stone); pointer-events: none; }
 .search-box .input { padding-left: 32px; }
+.filter-selects { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.filter-select { width: 172px; }
 
 .done-tip {
   display: flex; align-items: center; gap: 6px;
@@ -334,6 +405,21 @@ function showTip(text: string) {
 .link-btn:hover { background: var(--tint-sky); }
 .link-danger { color: #d92d20; }
 .link-danger:hover { background: var(--tint-rose); }
+
+/* 分页条（与工作台 FAQ 管理卡一致） */
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.pager-info { font-size: 12.5px; color: var(--slate); margin-right: auto; }
+.pager-size { display: flex; align-items: center; gap: 8px; }
+.pager-label { font-size: 12.5px; color: var(--slate); }
+.pager-nav { display: flex; align-items: center; gap: 8px; }
+.pager-btn {
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  background: var(--canvas); border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm);
+  color: var(--slate); cursor: pointer; transition: all 0.15s ease;
+}
+.pager-btn:hover:not(:disabled) { border-color: var(--steel); color: var(--ink); }
+.pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pager-page { font-size: 12.5px; color: var(--slate); min-width: 72px; text-align: center; }
 
 .perm-note {
   display: flex; align-items: flex-start; gap: 6px;

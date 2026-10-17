@@ -3,10 +3,13 @@
  * 管理控制台布局：浅色侧边栏（与用户端同一设计系统）+ 内容区
  * 「账号管理」统一管理用户与管理员账号（管理员分类仅超管可见）；管理员与用户一样可进入个人设置
  */
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
-import { session, isSuper, logoutAdmin, USER_ORIGIN } from '@/store/auth'
+import { session, isSuper, logoutAdmin, ensureAccountsLoaded, ensureMe, USER_ORIGIN } from '@/store/auth'
+import { ensureNotesLoaded, ensureQaLoaded, ensureQuizLoaded, ensureFeedbacksLoaded } from '@/store/admin'
+import { ensureFaqsLoaded } from '@/store/faq'
+import { ensureTipsLoaded } from '@/store/tips'
 
 const router = useRouter()
 const route = useRoute()
@@ -29,11 +32,24 @@ const roleLabel = computed(() => (isSuper.value ? '超级管理员' : '管理员
 const initial = computed(() => (session.value?.name || '管')[0])
 
 const showLogoutConfirm = ref(false)
+
+// 进入控制台即拉取巡检数据（幂等去重；失败静默，页面内操作再提示）
+onMounted(() => {
+  void ensureMe()
+  void ensureAccountsLoaded().catch(() => {})
+  void ensureNotesLoaded().catch(() => {})
+  void ensureQaLoaded().catch(() => {})
+  void ensureQuizLoaded().catch(() => {})
+  void ensureFeedbacksLoaded().catch(() => {})
+  void ensureFaqsLoaded().catch(() => {})
+  void ensureTipsLoaded().catch(() => {})
+})
+
 function handleLogout() {
   showLogoutConfirm.value = false
   logoutAdmin()
-  // 统一登录：回到用户端着陆页（?login=1 自动打开登录弹窗）
-  window.location.href = `${USER_ORIGIN}/login?login=1`
+  // 退出登录统一回到首页；?logout=1 让用户端先清空本端残留会话，避免被守卫重定向进应用
+  window.location.href = `${USER_ORIGIN}/login?logout=1`
 }
 </script>
 

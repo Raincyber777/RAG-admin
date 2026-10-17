@@ -8,8 +8,9 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import { USER_ORIGIN, session, isSuper, accounts } from '@/store/auth'
-import { notes, qaRecords, quizItems, feedbacks } from '@/store/admin'
+import { notes, qaRecords, quizItems, feedbacks, displayCourses } from '@/store/admin'
 import { faqs, addFaq, updateFaq, removeFaq, type FaqItem, type FaqScope } from '@/store/faq'
+import { tips, addTip, updateTip, removeTip, type TipItem, type TipScope } from '@/store/tips'
 
 const router = useRouter()
 
@@ -36,7 +37,8 @@ const stats = computed(() => [
   { label: '待处理反馈', value: pendingCount.value, icon: 'flag', tint: 'st-peach', unit: '条' },
 ])
 
-const quizTotal = quizItems.length
+const quizTotal = computed(() => quizItems.length)
+const courseCount = computed(() => displayCourses.value.length)
 
 /** 进入用户端（演示 SSO：携带登录态参数免登，管理员身份在用户端同样可用） */
 function enterUserSide() {
@@ -46,19 +48,30 @@ function enterUserSide() {
 }
 
 // ---------- FAQ 常见问题管理（用户端 / 管理端两套） ----------
+// 分权：管理端内容仅超级管理员可编辑，管理员只能维护用户端内容
 const faqScope = ref<FaqScope>('user')
 const faqList = computed(() => faqs[faqScope.value])
-const scopeLabel = computed(() => (faqScope.value === 'user' ? '用户端' : '管理端'))
+// 关键词搜索：在当前端的列表内过滤（匹配问题标题与解决描述）
+const faqQuery = ref('')
+const filteredFaqList = computed(() => {
+  const k = faqQuery.value.trim().toLowerCase()
+  if (!k) return faqList.value
+  return faqList.value.filter((f) => (f.q + f.a).toLowerCase().includes(k))
+})
+const scopeLabel = computed(() => (faqScope.value === 'user' ? '用户端' : faqScope.value === 'home' ? '首页' : '管理端'))
+/** 修改 / 删除弹窗里的展示位置说明（首页 FAQ 展示在着陆页，其余在对应端「使用说明」） */
+const faqWhereLabel = computed(() => (faqScope.value === 'home' ? '用户端首页' : `${scopeLabel.value}「使用说明」`))
+const canManageAdminContent = isSuper
 
-// ---------- FAQ 列表分页（每页 3 / 5 / 10 条，切换端或每页条数后回到第 1 页） ----------
+// ---------- FAQ 列表分页（每页 3 / 5 / 10 条，切换端 / 搜索 / 每页条数后回到第 1 页） ----------
 const faqPage = ref(1)
 const faqPageSize = ref(3)
-const faqTotalPages = computed(() => Math.max(1, Math.ceil(faqList.value.length / faqPageSize.value)))
+const faqTotalPages = computed(() => Math.max(1, Math.ceil(filteredFaqList.value.length / faqPageSize.value)))
 const faqSafePage = computed(() => Math.min(faqPage.value, faqTotalPages.value))
 const faqPaged = computed(() =>
-  faqList.value.slice((faqSafePage.value - 1) * faqPageSize.value, faqSafePage.value * faqPageSize.value),
+  filteredFaqList.value.slice((faqSafePage.value - 1) * faqPageSize.value, faqSafePage.value * faqPageSize.value),
 )
-watch(faqScope, () => {
+watch([faqScope, faqQuery], () => {
   faqPage.value = 1
 })
 function setFaqPageSize(s: number) {
@@ -84,7 +97,7 @@ function openFaqEdit(item: FaqItem) {
   faqFormError.value = ''
   showFaqForm.value = true
 }
-function confirmFaqSave() {
+async function confirmFaqSave() {
   const q = faqForm.value.q.trim()
   const a = faqForm.value.a.trim()
   if (!q) {
@@ -95,20 +108,111 @@ function confirmFaqSave() {
     faqFormError.value = '请输入解决描述'
     return
   }
-  if (faqEditing.value) updateFaq(faqScope.value, faqEditing.value.id, q, a)
-  else {
-    addFaq(faqScope.value, q, a)
-    // 新增的条目追加在列表末尾，跳到最后一页确保立即可见
-    faqPage.value = Math.max(1, Math.ceil(faqs[faqScope.value].length / faqPageSize.value))
+  try {
+    if (faqEditing.value) {
+      await updateFaq(faqScope.value, faqEditing.value.id, q, a)
+    } else {
+      await addFaq(faqScope.value, q, a)
+      // 新增的条目追加在列表末尾，跳到最后一页确保立即可见
+      faqPage.value = Math.max(1, Math.ceil(filteredFaqList.value.length / faqPageSize.value))
+    }
+    showFaqForm.value = false
+  } catch (e) {
+    faqFormError.value = e instanceof Error ? e.message : '保存失败，请稍后再试'
   }
-  showFaqForm.value = false
 }
 
 // 删除确认
 const faqDeleteTarget = ref<FaqItem | null>(null)
-function confirmFaqDelete() {
-  if (faqDeleteTarget.value) removeFaq(faqScope.value, faqDeleteTarget.value.id)
-  faqDeleteTarget.value = null
+const faqDeleteError = ref('')
+async function confirmFaqDelete() {
+  if (!faqDeleteTarget.value) return
+  try {
+    await removeFaq(faqScope.value, faqDeleteTarget.value.id)
+    faqDeleteTarget.value = null
+    faqDeleteError.value = ''
+  } catch (e) {
+    faqDeleteError.value = e instanceof Error ? e.message : '删除失败，请稍后再试'
+  }
+}
+
+// ---------- 使用技巧管理（用户端 / 管理端两套，分权与 FAQ 一致） ----------
+const tipScope = ref<TipScope>('user')
+const tipList = computed(() => tips[tipScope.value])
+const tipScopeLabel = computed(() => (tipScope.value === 'user' ? '用户端' : '管理端'))
+
+// ---------- 使用技巧列表分页（每页 3 / 5 / 10 条，切换端 / 搜索 / 每页条数后回到第 1 页） ----------
+const tipQuery = ref('')
+const filteredTipList = computed(() => {
+  const k = tipQuery.value.trim().toLowerCase()
+  if (!k) return tipList.value
+  return tipList.value.filter((t) => t.text.toLowerCase().includes(k))
+})
+const tipPage = ref(1)
+const tipPageSize = ref(3)
+const tipTotalPages = computed(() => Math.max(1, Math.ceil(filteredTipList.value.length / tipPageSize.value)))
+const tipSafePage = computed(() => Math.min(tipPage.value, tipTotalPages.value))
+const tipPaged = computed(() =>
+  filteredTipList.value.slice((tipSafePage.value - 1) * tipPageSize.value, tipSafePage.value * tipPageSize.value),
+)
+watch([tipScope, tipQuery], () => {
+  tipPage.value = 1
+})
+function setTipPageSize(s: number) {
+  tipPageSize.value = s
+  tipPage.value = 1
+}
+
+// 新增 / 编辑表单弹窗（editing 为 null 表示新增）
+const showTipForm = ref(false)
+const tipEditing = ref<TipItem | null>(null)
+const tipForm = ref({ text: '' })
+const tipFormError = ref('')
+
+function openTipCreate() {
+  tipEditing.value = null
+  tipForm.value = { text: '' }
+  tipFormError.value = ''
+  showTipForm.value = true
+}
+function openTipEdit(item: TipItem) {
+  tipEditing.value = item
+  tipForm.value = { text: item.text }
+  tipFormError.value = ''
+  showTipForm.value = true
+}
+async function confirmTipSave() {
+  const text = tipForm.value.text.trim()
+  if (!text) {
+    tipFormError.value = '请输入技巧内容'
+    return
+  }
+  try {
+    if (tipEditing.value) {
+      await updateTip(tipScope.value, tipEditing.value.id, text)
+    } else {
+      await addTip(tipScope.value, text)
+      // 新增的条目追加在列表末尾，跳到最后一页确保立即可见
+      tipPage.value = Math.max(1, Math.ceil(filteredTipList.value.length / tipPageSize.value))
+    }
+    showTipForm.value = false
+  } catch (e) {
+    tipFormError.value = e instanceof Error ? e.message : '保存失败，请稍后再试'
+  }
+}
+
+// 删除确认
+const tipDeleteTarget = ref<TipItem | null>(null)
+const tipDeleteError = ref('')
+async function confirmTipDelete() {
+  if (!tipDeleteTarget.value) return
+  try {
+    await removeTip(tipScope.value, tipDeleteTarget.value.id)
+    tipDeleteTarget.value = null
+    tipDeleteError.value = ''
+  } catch (e) {
+    tipDeleteError.value = e instanceof Error ? e.message : '删除失败，请稍后再试'
+  }
 }
 </script>
 
@@ -162,7 +266,7 @@ function confirmFaqDelete() {
         <span class="quick-ico q-mint"><AppIcon name="edit" :size="16" /></span>
         <div class="flex-1">
           <div class="quick-title">题库巡检</div>
-          <div class="quick-desc">共 {{ quizTotal }} 道练习题，覆盖 3 门课程</div>
+          <div class="quick-desc">共 {{ quizTotal }} 道练习题，覆盖 {{ courseCount }} 门课程</div>
         </div>
         <AppIcon name="chevron-right" :size="15" class="quick-arrow" />
       </button>
@@ -181,14 +285,24 @@ function confirmFaqDelete() {
       <div class="faq-head">
         <div>
           <div class="h4"><AppIcon name="info" :size="16" /> FAQ 常见问题管理</div>
-          <p class="faq-sub">维护用户端与管理端「使用说明」中的常见问题，每条由问题标题与解决描述组成</p>
+          <p class="faq-sub">维护用户端「使用说明」、用户端首页与管理端「使用说明」中的常见问题，每条由问题标题与解决描述组成</p>
         </div>
         <button class="btn btn-primary" @click="openFaqCreate"><AppIcon name="plus" :size="15" /> 新增 FAQ</button>
       </div>
 
       <div class="seg-tabs faq-tabs">
         <button class="seg-tab" :class="{ active: faqScope === 'user' }" @click="faqScope = 'user'">用户端 FAQ（{{ faqs.user.length }}）</button>
-        <button class="seg-tab" :class="{ active: faqScope === 'admin' }" @click="faqScope = 'admin'">管理端 FAQ（{{ faqs.admin.length }}）</button>
+        <button class="seg-tab" :class="{ active: faqScope === 'home' }" @click="faqScope = 'home'">首页 FAQ（{{ faqs.home.length }}）</button>
+        <button v-if="canManageAdminContent" class="seg-tab" :class="{ active: faqScope === 'admin' }" @click="faqScope = 'admin'">管理端 FAQ（{{ faqs.admin.length }}）</button>
+      </div>
+      <p v-if="!canManageAdminContent" class="perm-hint">管理端 FAQ 仅超级管理员可编辑，你当前维护的是用户端内容</p>
+
+      <div class="search-box">
+        <AppIcon name="search" :size="15" />
+        <input v-model="faqQuery" class="search-input" type="text" :placeholder="`搜索${scopeLabel} FAQ 关键词`" />
+        <button v-if="faqQuery" class="search-clear" aria-label="清空 FAQ 搜索" @click="faqQuery = ''">
+          <AppIcon name="x" :size="13" />
+        </button>
       </div>
 
       <div class="faq-list">
@@ -202,12 +316,14 @@ function confirmFaqDelete() {
             <button class="link-btn link-danger" @click="faqDeleteTarget = f">删除</button>
           </div>
         </div>
-        <p v-if="!faqList.length" class="faq-empty">暂无{{ scopeLabel }} FAQ，点击右上角「新增 FAQ」添加</p>
+        <p v-if="!filteredFaqList.length" class="faq-empty">
+          {{ faqQuery.trim() ? `未找到与「${faqQuery.trim()}」相关的${scopeLabel} FAQ` : `暂无${scopeLabel} FAQ，点击右上角「新增 FAQ」添加` }}
+        </p>
       </div>
 
       <!-- 分页条：每页 3 / 5 / 10 条 -->
-      <div v-if="faqList.length" class="pager">
-        <span class="pager-info">共 {{ faqList.length }} 条</span>
+      <div v-if="filteredFaqList.length" class="pager">
+        <span class="pager-info">共 {{ filteredFaqList.length }} 条</span>
         <div class="pager-size">
           <span class="pager-label">每页</span>
           <div class="seg-tabs">
@@ -234,7 +350,7 @@ function confirmFaqDelete() {
     <div v-if="showFaqForm" class="modal-mask" @click.self="showFaqForm = false">
       <div class="modal faq-modal">
         <div class="modal-title">{{ faqEditing ? '编辑 FAQ' : '新增 FAQ' }}（{{ scopeLabel }}）</div>
-        <p class="modal-sub">修改保存后会展示在{{ scopeLabel }}「使用说明」的常见问题列表中。</p>
+        <p class="modal-sub">修改保存后会展示在{{ faqWhereLabel }}的常见问题列表中。</p>
         <div class="field">
           <label class="field-label">问题标题</label>
           <input v-model="faqForm.q" class="input" placeholder="一句话概括常见问题" maxlength="60" @input="faqFormError = ''" />
@@ -255,10 +371,105 @@ function confirmFaqDelete() {
     <div v-if="faqDeleteTarget" class="modal-mask" @click.self="faqDeleteTarget = null">
       <div class="modal modal-sm">
         <div class="modal-title">删除 FAQ</div>
-        <p class="modal-sub">确定删除「{{ faqDeleteTarget.q }}」吗？删除后{{ scopeLabel }}使用说明中将不再展示该问题。</p>
+        <p class="modal-sub">确定删除「{{ faqDeleteTarget.q }}」吗？删除后{{ faqWhereLabel }}中将不再展示该问题。</p>
+        <p v-if="faqDeleteError" class="field-hint hint-err">{{ faqDeleteError }}</p>
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="faqDeleteTarget = null">取消</button>
           <button class="btn btn-danger" @click="confirmFaqDelete">确认删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 使用技巧管理 -->
+    <section class="card faq-manage">
+      <div class="faq-head">
+        <div>
+          <div class="h4"><AppIcon name="spark" :size="16" /> 使用技巧管理</div>
+          <p class="faq-sub">维护用户端与管理端「使用说明」中的使用技巧，每条为一句要点</p>
+        </div>
+        <button class="btn btn-primary" @click="openTipCreate"><AppIcon name="plus" :size="15" /> 新增技巧</button>
+      </div>
+
+      <div class="seg-tabs faq-tabs">
+        <button class="seg-tab" :class="{ active: tipScope === 'user' }" @click="tipScope = 'user'">用户端技巧（{{ tips.user.length }}）</button>
+        <button v-if="canManageAdminContent" class="seg-tab" :class="{ active: tipScope === 'admin' }" @click="tipScope = 'admin'">管理端技巧（{{ tips.admin.length }}）</button>
+      </div>
+      <p v-if="!canManageAdminContent" class="perm-hint">管理端使用技巧仅超级管理员可编辑，你当前维护的是用户端内容</p>
+
+      <div class="search-box">
+        <AppIcon name="search" :size="15" />
+        <input v-model="tipQuery" class="search-input" type="text" :placeholder="`搜索${tipScopeLabel}使用技巧关键词`" />
+        <button v-if="tipQuery" class="search-clear" aria-label="清空技巧搜索" @click="tipQuery = ''">
+          <AppIcon name="x" :size="13" />
+        </button>
+      </div>
+
+      <div class="faq-list">
+        <div v-for="(t, i) in tipPaged" :key="t.id" class="faq-row">
+          <div class="flex-1 faq-texts">
+            <div class="faq-q">{{ (tipSafePage - 1) * tipPageSize + i + 1 }}. {{ t.text }}</div>
+          </div>
+          <div class="faq-ops">
+            <button class="link-btn" @click="openTipEdit(t)">编辑</button>
+            <button class="link-btn link-danger" @click="tipDeleteTarget = t">删除</button>
+          </div>
+        </div>
+        <p v-if="!filteredTipList.length" class="faq-empty">
+          {{ tipQuery.trim() ? `未找到与「${tipQuery.trim()}」相关的${tipScopeLabel}使用技巧` : `暂无${tipScopeLabel}使用技巧，点击右上角「新增技巧」添加` }}
+        </p>
+      </div>
+
+      <!-- 分页条：每页 3 / 5 / 10 条 -->
+      <div v-if="filteredTipList.length" class="pager">
+        <span class="pager-info">共 {{ filteredTipList.length }} 条</span>
+        <div class="pager-size">
+          <span class="pager-label">每页</span>
+          <div class="seg-tabs">
+            <button
+              v-for="s in [3, 5, 10]" :key="s"
+              class="seg-tab" :class="{ active: tipPageSize === s }"
+              @click="setTipPageSize(s)"
+            >{{ s }}</button>
+          </div>
+        </div>
+        <div class="pager-nav">
+          <button class="pager-btn" :disabled="tipSafePage <= 1" aria-label="上一页" @click="tipPage = tipSafePage - 1">
+            <AppIcon name="chevron-left" :size="14" />
+          </button>
+          <span class="pager-page">第 {{ tipSafePage }} / {{ tipTotalPages }} 页</span>
+          <button class="pager-btn" :disabled="tipSafePage >= tipTotalPages" aria-label="下一页" @click="tipPage = tipSafePage + 1">
+            <AppIcon name="chevron-right" :size="14" />
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 新增 / 编辑使用技巧弹窗 -->
+    <div v-if="showTipForm" class="modal-mask" @click.self="showTipForm = false">
+      <div class="modal faq-modal">
+        <div class="modal-title">{{ tipEditing ? '编辑技巧' : '新增技巧' }}（{{ tipScopeLabel }}）</div>
+        <p class="modal-sub">修改保存后会展示在{{ tipScopeLabel }}「使用说明」的使用技巧列表中。</p>
+        <div class="field">
+          <label class="field-label">技巧内容</label>
+          <textarea v-model="tipForm.text" class="textarea" rows="4" placeholder="一句可操作的要点，如：演示环境下验证码统一为 123456" maxlength="200" @input="tipFormError = ''"></textarea>
+          <p v-if="tipFormError" class="field-hint hint-err">{{ tipFormError }}</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showTipForm = false">取消</button>
+          <button class="btn btn-primary" @click="confirmTipSave">{{ tipEditing ? '保存修改' : '确认新增' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除使用技巧确认弹窗 -->
+    <div v-if="tipDeleteTarget" class="modal-mask" @click.self="tipDeleteTarget = null">
+      <div class="modal modal-sm">
+        <div class="modal-title">删除使用技巧</div>
+        <p class="modal-sub">确定删除「{{ tipDeleteTarget.text.slice(0, 30) }}{{ tipDeleteTarget.text.length > 30 ? '…' : '' }}」吗？删除后{{ tipScopeLabel }}使用说明中将不再展示该技巧。</p>
+        <p v-if="tipDeleteError" class="field-hint hint-err">{{ tipDeleteError }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="tipDeleteTarget = null">取消</button>
+          <button class="btn btn-danger" @click="confirmTipDelete">确认删除</button>
         </div>
       </div>
     </div>
@@ -312,6 +523,28 @@ function confirmFaqDelete() {
 .faq-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .faq-sub { font-size: 12.5px; color: var(--stone); margin-top: 3px; }
 .faq-tabs { margin-top: 14px; }
+.perm-hint { font-size: 12px; color: var(--stone); margin-top: 8px; }
+
+/* 搜索框（FAQ / 使用技巧管理共用） */
+.search-box {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius-md);
+  background: var(--canvas); padding: 0 12px; height: 36px;
+  color: var(--stone); margin-top: 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--tint-lavender); }
+.search-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-family: inherit; font-size: 13px; color: var(--ink);
+}
+.search-input::placeholder { color: var(--stone); }
+.search-clear {
+  border: none; background: transparent; color: var(--stone); cursor: pointer;
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); flex-shrink: 0;
+}
+.search-clear:hover { color: var(--ink); background: var(--surface-soft); }
 .faq-list { display: flex; flex-direction: column; }
 .faq-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 2px; border-top: 1px solid var(--hairline-soft); }
 .faq-row:first-child { border-top: none; }

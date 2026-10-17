@@ -106,7 +106,7 @@ function removeDoc(d: AdminDoc) {
             <td><div class="d-name ellipsis">{{ d.name }}</div></td>
             <td><span class="tag tag-purple">{{ d.space }}</span></td>
             <td>{{ d.owner }}</td>
-            <td>{{ d.chunks || '—' }}</td>
+            <td>{{ d.chunks || 0 }}</td>
             <td>
               <div class="flex-col gap-xs" style="min-width: 130px">
                 <span class="tag" :class="statusTag[d.status]" style="align-self: flex-start">{{ statusText[d.status] }}</span>

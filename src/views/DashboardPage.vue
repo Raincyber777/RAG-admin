@@ -4,22 +4,24 @@
  * 热门追问词：从问答记录的「问题 + 回答」文本实时统计高频概念，问答变化词云随之变化
  * 最新动态：轮播展示，最新一条定期从顶部推入、依次覆盖旧动态
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import AppIcon from '@/components/AppIcon.vue'
 import { accounts } from '@/store/auth'
 import { notes, qaRecords, quizItems, feedbacks, weeklyQa, recentEvents } from '@/store/admin'
 
-const userCount = accounts.filter((a) => a.role === 'user').length
-const pendingCount = feedbacks.filter((f) => f.status === '待处理').length
-
-const stats = [
-  { label: '用户总数', value: userCount, icon: 'users', tint: 'st-lavender', delta: '较上周 +1' },
-  { label: '课堂纪要', value: notes.length, icon: 'book', tint: 'st-sky', delta: '本周新增 3' },
-  { label: '问答记录', value: 835, icon: 'chat', tint: 'st-mint', delta: '近 7 日 ' + weeklyQa.reduce((s, w) => s + w.count, 0) + ' 次' },
-  { label: '练习题库', value: quizItems.length, icon: 'edit', tint: 'st-peach', delta: '覆盖 3 门课程' },
-  { label: '待处理反馈', value: pendingCount, icon: 'flag', tint: 'st-rose', delta: pendingCount ? '需要尽快处理' : '暂无待办' },
-]
+// 核心指标实时来自巡检数据（近 7 日问答量与最新动态仍为演示数据）
+const stats = computed(() => {
+  const userCount = accounts.filter((a) => a.role === 'user').length
+  const pendingCount = feedbacks.filter((f) => f.status === '待处理').length
+  return [
+    { label: '用户总数', value: userCount, icon: 'users', tint: 'st-lavender', delta: '较上周 +1' },
+    { label: '课堂纪要', value: notes.length, icon: 'book', tint: 'st-sky', delta: '本周新增 3' },
+    { label: '问答记录', value: qaRecords.length, icon: 'chat', tint: 'st-mint', delta: '近 7 日 ' + weeklyQa.reduce((s, w) => s + w.count, 0) + ' 次' },
+    { label: '练习题库', value: quizItems.length, icon: 'edit', tint: 'st-peach', delta: `覆盖 ${new Set(notes.map((n) => n.course)).size} 门课程` },
+    { label: '待处理反馈', value: pendingCount, icon: 'flag', tint: 'st-rose', delta: pendingCount ? '需要尽快处理' : '暂无待办' },
+  ]
+})
 
 // ---------- ECharts：近 7 日问答量 ----------
 const trendRef = ref<HTMLElement>()
@@ -84,10 +86,8 @@ const courseDist = computed(() => {
   return [...map.entries()].map(([course, count]) => ({ course, count }))
 })
 
-function initDist() {
-  if (!distRef.value) return
-  distChart = echarts.init(distRef.value)
-  distChart.setOption({
+function distOption() {
+  return {
     grid: { left: 6, right: 40, top: 10, bottom: 10, containLabel: true },
     tooltip: {
       trigger: 'item',
@@ -111,8 +111,17 @@ function initDist() {
       itemStyle: { borderRadius: 6, color: '#2a9d99' },
       label: { show: true, position: 'right', formatter: '{c} 份', color: '#5b6472', fontSize: 11 },
     }],
-  })
+  }
 }
+
+function initDist() {
+  if (!distRef.value) return
+  distChart = echarts.init(distRef.value)
+  distChart.setOption(distOption())
+}
+
+// 纪要数据后到时刷新课程分布（巡检数据异步加载）
+watch(courseDist, () => distChart?.setOption(distOption()))
 
 function onResize() {
   trendChart?.resize()
@@ -177,7 +186,7 @@ const visibleEvents = computed(() => {
   <div class="page">
     <header class="mb-md">
       <h1 class="h2">数据看板</h1>
-      <p class="text-sm">平台运行与使用情况总览（演示数据）</p>
+      <p class="text-sm">平台运行与使用情况总览（近 7 日趋势与最新动态为演示数据）</p>
     </header>
 
     <!-- 核心指标 -->

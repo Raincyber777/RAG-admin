@@ -42,10 +42,17 @@ const detail = ref<AdminNote | null>(null)
 
 // ---------- 删除确认 ----------
 const deleteTarget = ref<AdminNote | null>(null)
-function confirmDelete() {
-  if (deleteTarget.value) removeNote(deleteTarget.value.id)
-  deleteTarget.value = null
-  detail.value = null
+const deleteError = ref('')
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  try {
+    await removeNote(deleteTarget.value.id)
+    deleteTarget.value = null
+    detail.value = null
+    deleteError.value = ''
+  } catch (e) {
+    deleteError.value = e instanceof Error ? e.message : '删除失败，请确认后端已启动'
+  }
 }
 </script>
 
@@ -158,6 +165,7 @@ function confirmDelete() {
       <div class="modal modal-sm">
         <div class="modal-title">删除课堂纪要</div>
         <p class="modal-sub">确定删除「{{ deleteTarget.title }}」吗？该纪要的问答与练习数据将一并移除，此操作不可恢复。</p>
+        <p v-if="deleteError" class="modal-sub hint-err">{{ deleteError }}</p>
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="deleteTarget = null">取消</button>
           <button class="btn btn-danger" @click="confirmDelete">确认删除</button>
@@ -220,6 +228,7 @@ function confirmDelete() {
 .em-list li { display: flex; align-items: flex-start; gap: 6px; }
 .em-ico { color: var(--brand-orange); flex-shrink: 0; margin-top: 3px; }
 .modal-sub { color: var(--slate); line-height: 1.7; }
+.hint-err { color: #d92d20; }
 
 @media (max-width: 900px) {
   .page { padding: 20px 16px; }

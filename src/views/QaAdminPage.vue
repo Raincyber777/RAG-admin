@@ -128,7 +128,7 @@ const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
         <div class="answer">{{ detail.answer }}</div>
         <div class="src-row">
           <span class="src-label">溯源出处</span>
-          <span v-for="s in detail.sources" :key="s.label" class="tag" :class="sourceTag(s.type)">
+          <span v-for="(s, i) in detail.sources" :key="i" class="tag" :class="sourceTag(s.type)">
             <AppIcon :name="s.type === '录音' ? 'mic' : 'image'" :size="11" /> {{ s.label }}
           </span>
         </div>
