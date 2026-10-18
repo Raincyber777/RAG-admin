@@ -29,7 +29,10 @@ export interface Account {
   questions?: number
 }
 
-export const USER_ORIGIN = 'http://localhost:5173'
+/** 用户端地址（管理端退出后一键回到用户端登录页）
+ * 本地开发取 .env.development（5173）；生产构建由 CI 注入 VITE_USER_ORIGIN（如 http://服务器IP） */
+export const USER_ORIGIN =
+  (import.meta.env.VITE_USER_ORIGIN as string | undefined) || window.location.origin
 
 const SESSION_KEY = 'zy_admin_session'
 

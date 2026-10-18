@@ -60,7 +60,7 @@ const DEFAULT_TIPS = [
 const TIP_ICONS = ['info', 'lock', 'link', 'users', 'eye']
 /** 按技巧的全局序号循环取图标（后端只存文本，图标为展示层装饰） */
 function tipIcon(globalIndex: number) {
-  return TIP_ICONS[globalIndex % TIP_ICONS.length]
+  return TIP_ICONS[globalIndex % TIP_ICONS.length] ?? 'info'
 }
 const tipItems = computed(() => (storeTips.admin.length ? storeTips.admin.map((t) => t.text) : DEFAULT_TIPS))
 // 关键词搜索：过滤后分页（输入或清空关键词时回到第 1 页）

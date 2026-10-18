@@ -1,0 +1,80 @@
+# 管理端自动部署：push 到 main / txy 后自动构建并发布到阿里云 ECS（与用户端同一台机器）
+# 前置配置（仓库 Settings → Secrets and variables → Actions）：
+#   Secrets（两仓库相同）：
+#     DEPLOY_HOST     ECS 公网 IP，如 47.x.x.x
+#     DEPLOY_USER     SSH 用户，如 root
+#     DEPLOY_PORT     SSH 端口（22 可不配）
+#     DEPLOY_SSH_KEY  部署专用私钥全文（生成方法见用户端仓库 deploy/README.md）
+#   Variables（本仓库）：
+#     VITE_USER_ORIGIN  用户端访问地址，如 http://47.x.x.x
+name: Deploy Admin Frontend
+
+on:
+  push:
+    branches: [main, txy]   # 按需增删；删掉 txy 后仅 main 触发
+  workflow_dispatch:        # 支持在 Actions 页手动触发
+
+# 同一时间只跑一个部署，新提交取消进行中的旧部署
+concurrency:
+  group: deploy-admin-frontend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build
+        env:
+          # 用户端回跳地址：未配置时直接失败，避免静默打出 localhost 跳转
+          VITE_USER_ORIGIN: ${{ vars.VITE_USER_ORIGIN }}
+        run: |
+          if [ -z "$VITE_USER_ORIGIN" ]; then
+            echo "::error::未配置 Repository variable VITE_USER_ORIGIN（如 http://<服务器IP>）。请在 Settings → Secrets and variables → Actions → Variables 中添加"
+            exit 1
+          fi
+          npm ci
+          npm run build   # 含 vue-tsc 类型检查，检查不过不会部署
+
+      - name: Package dist
+        run: tar -czf /tmp/dist.tar.gz -C dist .
+
+      - name: Release to ECS (atomic swap)
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "::error::未配置 secrets DEPLOY_HOST / DEPLOY_USER"
+            exit 1
+          fi
+          PORT="${SSH_PORT:-22}"
+          SSH="ssh -p $PORT -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key"
+          SCP="scp -P $PORT -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key"
+
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /var/www/rag-admin.new /var/www/rag-admin"
+          $SCP /tmp/dist.tar.gz "$SSH_USER@$SSH_HOST:/tmp/rag-admin-dist.tar.gz"
+          $SSH "$SSH_USER@$SSH_HOST" '
+            set -e
+            rm -rf /var/www/rag-admin.new/*
+            tar -xzf /tmp/rag-admin-dist.tar.gz -C /var/www/rag-admin.new
+            rm -rf /var/www/rag-admin.old
+            mv /var/www/rag-admin /var/www/rag-admin.old
+            mv /var/www/rag-admin.new /var/www/rag-admin
+            rm -f /tmp/rag-admin-dist.tar.gz
+          '
+          echo "发布完成：/var/www/rag-admin（上一版保留在 /var/www/rag-admin.old）"
+
+      - name: Clean up key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
