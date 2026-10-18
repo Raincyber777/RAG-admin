@@ -22,7 +22,7 @@ const roles = [
   },
   {
     tag: 'tag-purple', name: '超级管理员', icon: 'shield', tint: 'ro-purple',
-    desc: '拥有管理端全部权限，额外可创建 / 停用管理员账号、重置其密码。',
+    desc: '拥有管理端全部权限，额外可创建 / 停用管理员账号、重置其密码，并在「协议管理」中维护《用户协议》与《隐私政策》。',
   },
 ]
 
@@ -35,16 +35,27 @@ const boards = [
   { icon: 'chat', tint: 'bo-lavender', name: '问答记录', desc: '查看智能问答明细，每条回答均带录音时间戳或板书页码溯源', note: '' },
   { icon: 'edit', tint: 'bo-sky', name: '题库管理', desc: '查看练习题（单选 / 多选 / 不定项 / 简答）的题干、选项与参考答案', note: '' },
   { icon: 'flag', tint: 'bo-peach', name: '问题反馈', desc: '查看用户提交的反馈标题、详细描述与截图，标记已处理', note: '' },
+  { icon: 'horn', tint: 'bo-yellow', name: '公告管理', desc: '发布公告（发布者本人不弹提醒）、点击卡片查看完整内容、直接编辑修改（需确认，不重新提醒）、撤回与批量删除；「发布日志」全程留痕', note: '' },
   { icon: 'sliders', tint: 'bo-mint', name: '个人设置', desc: '维护头像、用户名、手机号、邮箱与密码，修改即时同步侧边栏', note: '' },
 ]
 
+// 仅超级管理员可见的板块（协议管理入口在「公告管理」页第三个标签）
+const superBoards = [
+  {
+    icon: 'shield', tint: 'bo-purple', name: '协议管理', note: '仅超级管理员',
+    desc: '在「公告管理 → 协议管理」中维护《用户协议》与《隐私政策》：编辑器已预填当前生效内容，可直接修改，保存后立即对所有身份生效',
+  },
+]
+
+const visibleBoards = computed(() => (isSuper.value ? [...boards, ...superBoards] : boards))
+
 // ---------- 使用技巧（工作台维护；分页展示） ----------
 const DEFAULT_TIPS = [
-  '演示环境下手机号 / 邮箱验证码统一为 123456；重置密码至少 8 位。',
+  '更换手机号 / 邮箱需输入验证码，60 秒后可重发；重置密码至少 8 位。',
   '停用账号只禁止登录、不删除数据，随时可以恢复；操作前会弹出二次确认。',
   '管理员账号两端通用：在用户端登录会先进入管理端，工作台可一键回到用户端。',
   '用户名修改后，欢迎语的称呼、侧边栏卡片会同步更新（重新登录同样生效）。',
-  '看板图表与动态为演示数据，接入后端后替换为统计接口即可，页面结构不变。',
+  '看板核心指标实时来自后端统计接口，热门追问词与最新动态持续更新中。',
 ]
 const TIP_ICONS = ['info', 'lock', 'link', 'users', 'eye']
 /** 按技巧的全局序号循环取图标（后端只存文本，图标为展示层装饰） */
@@ -90,7 +101,7 @@ const DEFAULT_FAQS = [
   {
     id: 'd4',
     q: '数据看板上的数字是真实的吗？',
-    a: '看板核心指标实时来自后端统计接口；热门追问词与最新动态为演示数据。常见问题均可在工作台维护并同步到本页。',
+    a: '看板核心指标实时来自后端统计接口。常见问题均可在工作台维护并同步到本页。',
   },
 ]
 const faqItemsAll = computed(() => (storeFaqs.admin.length ? storeFaqs.admin : DEFAULT_FAQS))
@@ -141,10 +152,10 @@ watch(faqQuery, () => {
     <!-- 板块导览 -->
     <div class="group-head">
       <h2 class="group-title">板块导览</h2>
-      <span class="group-sub">{{ isSuper ? '9 个板块' : '8 个板块（管理员账号仅超级管理员可见）' }}</span>
+      <span class="group-sub">{{ isSuper ? `${visibleBoards.length} 个板块` : `${visibleBoards.length} 个板块（协议管理仅超级管理员可见）` }}</span>
     </div>
     <div class="board-grid">
-      <div v-for="b in boards" :key="b.name" class="card board-card">
+      <div v-for="b in visibleBoards" :key="b.name" class="card board-card">
         <div class="board-head">
           <span class="board-ico" :class="b.tint"><AppIcon :name="b.icon" :size="16" /></span>
           <span class="board-name">{{ b.name }}</span>

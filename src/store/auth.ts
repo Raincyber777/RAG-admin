@@ -8,7 +8,7 @@
 import { computed, reactive, ref } from 'vue'
 
 import { accountsAdminApi, authApi, type ApiUser } from '@/api'
-import { clearTokens, getRefresh, getToken, mediaUrl, saveTokens, setAuthExpiredHandler } from '@/api/http'
+import { clearTokens, getRefresh, getToken, mediaUrl, saveTokens, setAuthExpiredHandler, BASE } from '@/api/http'
 
 export type Role = 'user' | 'admin' | 'super'
 export type AccountStatus = 'active' | 'disabled'
@@ -159,9 +159,13 @@ export async function logoutAdmin() {
   // 覆盖退出登录自己的跳回地址（曾是退出后仍进应用的根因）
   if (refresh) {
     try {
-      await fetch('http://localhost:8000/api/auth/logout/', {
+      await fetch(`${BASE}/auth/logout/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(access ? { Authorization: `Bearer ${access}` } : {}) },
+        headers: {
+          'ngrok-skip-browser-warning': '1',
+          'Content-Type': 'application/json',
+          ...(access ? { Authorization: `Bearer ${access}` } : {}),
+        },
         body: JSON.stringify({ refresh }),
       })
     } catch {

@@ -6,10 +6,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import AnnouncementModal from '@/components/AnnouncementModal.vue'
 import { session, isSuper, logoutAdmin, ensureAccountsLoaded, ensureMe, USER_ORIGIN } from '@/store/auth'
+import LogoMark from '@/components/LogoMark.vue'
 import { ensureNotesLoaded, ensureQaLoaded, ensureQuizLoaded, ensureFeedbacksLoaded } from '@/store/admin'
 import { ensureFaqsLoaded } from '@/store/faq'
 import { ensureTipsLoaded } from '@/store/tips'
+import { ensureAnnouncementsLoaded, refreshUnread, unreadCount } from '@/store/announcement'
 
 const router = useRouter()
 const route = useRoute()
@@ -23,6 +26,7 @@ const navs = [
   { path: '/admin/qa', icon: 'chat', label: '问答记录' },
   { path: '/admin/quiz', icon: 'edit', label: '题库管理' },
   { path: '/admin/feedbacks', icon: 'flag', label: '问题反馈' },
+  { path: '/admin/announcements', icon: 'horn', label: '公告管理' },
   { path: '/admin/guide', icon: 'info', label: '使用说明' },
   { path: '/admin/settings', icon: 'sliders', label: '个人设置' },
 ]
@@ -32,6 +36,11 @@ const roleLabel = computed(() => (isSuper.value ? '超级管理员' : '管理员
 const initial = computed(() => (session.value?.name || '管')[0])
 
 const showLogoutConfirm = ref(false)
+
+/** 角标文案：99+ 封顶 */
+function badgeText(n: number) {
+  return n > 99 ? '99+' : String(n)
+}
 
 // 进入控制台即拉取巡检数据（幂等去重；失败静默，页面内操作再提示）
 onMounted(() => {
@@ -43,6 +52,8 @@ onMounted(() => {
   void ensureFeedbacksLoaded().catch(() => {})
   void ensureFaqsLoaded().catch(() => {})
   void ensureTipsLoaded().catch(() => {})
+  void ensureAnnouncementsLoaded().catch(() => {})
+  void refreshUnread()
 })
 
 function handleLogout() {
@@ -65,15 +76,7 @@ function handleLogout() {
     <aside class="sidebar" :class="{ open: sidebarOpen }">
       <div class="brand" @click="router.push('/admin/welcome')">
         <div class="brand-logo">
-          <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
-            <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#zx-admin)" />
-            <path d="M16 6.5l2.4 7.1 7.1 2.4-7.1 2.4L16 25.5l-2.4-7.1-7.1-2.4 7.1-2.4z" fill="#fff" />
-            <defs>
-              <linearGradient id="zx-admin" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#6d5ae0" /><stop offset="1" stop-color="#4534b3" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <LogoMark :size="26" />
         </div>
         <div>
           <div class="brand-name">智学纪要</div>
@@ -92,6 +95,8 @@ function handleLogout() {
         >
           <AppIcon :name="n.icon" :size="17" />
           <span>{{ n.label }}</span>
+          <!-- 新公告角标：公告管理导航上的未读数 -->
+          <span v-if="n.path === '/admin/announcements' && unreadCount > 0" class="nav-badge">{{ badgeText(unreadCount) }}</span>
         </router-link>
       </nav>
 
@@ -130,6 +135,9 @@ function handleLogout() {
         </div>
       </div>
     </div>
+
+    <!-- 登录后新公告弹窗：只提醒一次，点「我知道了」后不再弹（发新公告除外） -->
+    <AnnouncementModal />
   </div>
 </template>
 
@@ -164,6 +172,12 @@ function handleLogout() {
 }
 .nav-item:hover { background: var(--surface); color: var(--ink); }
 .nav-item.active { background: var(--tint-lavender); color: var(--brand-purple-800); }
+/* 新公告未读角标 */
+.nav-badge {
+  margin-left: auto; min-width: 17px; height: 17px; padding: 0 5px;
+  border-radius: 999px; background: var(--error); color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+}
 
 .sidebar-footer { padding: 12px; border-top: 1px solid var(--hairline-soft); }
 .admin-card { display: flex; align-items: center; gap: 10px; }

@@ -128,7 +128,7 @@ function sendPhoneCode() {
   phone.error = ''
   if (!phoneMsg.value.ok) { phone.error = phoneMsg.value.text; return }
   startCooldown('phone')
-  phone.sent = `验证码已发送至 ${maskPhone(phone.value.trim())}（演示验证码：${DEMO_CODE}）`
+  phone.sent = `验证码已发送至 ${maskPhone(phone.value.trim())}（验证码：${DEMO_CODE}）`
 }
 async function confirmPhone() {
   phone.error = ''
@@ -153,7 +153,7 @@ function sendEmailCode() {
   email.error = ''
   if (!emailMsg.value.ok) { email.error = emailMsg.value.text; return }
   startCooldown('email')
-  email.sent = `验证码已发送至原邮箱 ${maskEmail(session.value?.email || '')}（演示验证码：${DEMO_CODE}）`
+  email.sent = `验证码已发送至原邮箱 ${maskEmail(session.value?.email || '')}（验证码：${DEMO_CODE}）`
 }
 async function confirmEmail() {
   email.error = ''

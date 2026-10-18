@@ -451,7 +451,7 @@ async function confirmTipDelete() {
         <p class="modal-sub">修改保存后会展示在{{ tipScopeLabel }}「使用说明」的使用技巧列表中。</p>
         <div class="field">
           <label class="field-label">技巧内容</label>
-          <textarea v-model="tipForm.text" class="textarea" rows="4" placeholder="一句可操作的要点，如：演示环境下验证码统一为 123456" maxlength="200" @input="tipFormError = ''"></textarea>
+          <textarea v-model="tipForm.text" class="textarea" rows="4" placeholder="一句可操作的要点，如：更换手机号需先输入短信验证码" maxlength="200" @input="tipFormError = ''"></textarea>
           <p v-if="tipFormError" class="field-hint hint-err">{{ tipFormError }}</p>
         </div>
         <div class="modal-actions">

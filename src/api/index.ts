@@ -205,3 +205,42 @@ export interface PlatformStats {
 export const statsApi = {
   summary: () => request<PlatformStats>('/stats/summary/'),
 }
+
+// ---------- 公告与协议 ----------
+export interface ApiAnnouncement {
+  id: number
+  title: string
+  content: string
+  status: 'published' | 'withdrawn'
+  creator_name: string
+  created_at: string
+  withdrawn_at: string | null
+}
+
+export interface LegalDocState {
+  content: string
+  updated_at: string | null
+  updated_by?: string
+  is_default?: boolean
+}
+
+export const announcementsAdminApi = {
+  list: () => listAll<ApiAnnouncement>('/admin/announcements/'),
+  create: (data: { title: string; content: string }) =>
+    request<ApiAnnouncement>('/admin/announcements/', { method: 'POST', data }),
+  update: (id: number, data: { title: string; content: string }) =>
+    request<ApiAnnouncement>(`/admin/announcements/${id}/`, { method: 'PUT', data }),
+  withdraw: (id: number) =>
+    request<ApiAnnouncement>(`/admin/announcements/${id}/withdraw/`, { method: 'POST' }),
+  remove: (id: number) => request<void>(`/admin/announcements/${id}/`, { method: 'DELETE' }),
+  batchDelete: (ids: number[]) =>
+    request<{ detail: string; deleted: number }>('/admin/announcements/batch_delete/', { method: 'POST', data: { ids } }),
+  unread: () => request<{ count: number; latest: ApiAnnouncement | null }>('/announcements/unread/'),
+  markAllRead: () => request<{ detail: string }>('/announcements/read/', { method: 'POST', data: { all: true } }),
+}
+
+export const legalAdminApi = {
+  get: (key: 'terms' | 'privacy') => request<LegalDocState>(`/admin/legal/${key}/`),
+  save: (key: 'terms' | 'privacy', content: string) =>
+    request<LegalDocState>(`/admin/legal/${key}/`, { method: 'PUT', data: { content } }),
+}

@@ -186,7 +186,7 @@ const visibleEvents = computed(() => {
   <div class="page">
     <header class="mb-md">
       <h1 class="h2">数据看板</h1>
-      <p class="text-sm">平台运行与使用情况总览（近 7 日趋势与最新动态为演示数据）</p>
+      <p class="text-sm">平台运行与使用情况总览</p>
     </header>
 
     <!-- 核心指标 -->
