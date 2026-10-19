@@ -8,6 +8,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import { USER_ORIGIN, session, isSuper, accounts } from '@/store/auth'
+import { getRefresh, getToken } from '@/api/http'
 import { notes, qaRecords, quizItems, feedbacks, displayCourses } from '@/store/admin'
 import { faqs, addFaq, updateFaq, removeFaq, type FaqItem, type FaqScope } from '@/store/faq'
 import { tips, addTip, updateTip, removeTip, type TipItem, type TipScope } from '@/store/tips'
@@ -40,11 +41,20 @@ const stats = computed(() => [
 const quizTotal = computed(() => quizItems.length)
 const courseCount = computed(() => displayCourses.value.length)
 
-/** 进入用户端（演示 SSO：携带登录态参数免登，管理员身份在用户端同样可用） */
+/** 进入用户端（演示 SSO：携带登录态参数免登，管理员身份在用户端同样可用）
+ * 必须带 t / rt（JWT）：用户端 acceptUserSso 缺 token 视为无效会落到登录页要求重新登录 */
 function enterUserSide() {
   const s = session.value
-  const q = s ? `&n=${encodeURIComponent(s.name)}&e=${encodeURIComponent(s.email)}&r=${s.role}` : ''
-  window.location.href = `${USER_ORIGIN}/studio?sso=1${q}`
+  if (!s) return
+  const q = new URLSearchParams({
+    sso: '1',
+    n: s.name,
+    e: s.email,
+    r: s.role,
+    t: getToken() || '',
+    rt: getRefresh() || '',
+  })
+  window.location.href = `${USER_ORIGIN}/studio?${q.toString()}`
 }
 
 // ---------- FAQ 常见问题管理（用户端 / 管理端两套） ----------
