@@ -6,8 +6,9 @@
 import { reactive, ref, computed } from 'vue'
 
 import {
-  notesAdminApi, qaAdminApi, quizAdminApi, feedbackAdminApi,
+  notesAdminApi, qaAdminApi, quizAdminApi, feedbackAdminApi, statsApi,
   type ApiNote, type ApiQaRecord, type ApiQuizItem, type ApiFeedback,
+  type DashboardWeekly, type DashboardEvent,
 } from '@/api'
 import { mediaUrl } from '@/api/http'
 
@@ -314,22 +315,23 @@ export async function removeCourseDisplay(display: string) {
   ])
 }
 
-// ---------- 看板统计（后端暂无按天聚合，趋势与动态为演示数据） ----------
-export const weeklyQa = [
-  { day: '10-06', count: 86 },
-  { day: '10-07', count: 102 },
-  { day: '10-08', count: 95 },
-  { day: '10-09', count: 130 },
-  { day: '10-10', count: 158 },
-  { day: '10-11', count: 121 },
-  { day: '10-12', count: 143 },
-]
+// ---------- 看板统计（近 7 日问答量 / 最新动态：来自 /api/stats/dashboard/，失败显示空态） ----------
+export const weeklyQa = ref<DashboardWeekly[]>([])
+export const recentEvents = ref<DashboardEvent[]>([])
+export const dashboardCounts = ref({ users_7d: 0, notes_7d: 0, qa_7d: 0 })
 
-export const recentEvents = [
-  { time: '10-12 11:02', text: '「第13讲 多元函数微分」纪要生成完成（上传者：周子航）' },
-  { time: '10-12 10:44', text: '用户「李思远」围绕「第9讲 图与最短路径」完成 2 轮追问' },
-  { time: '10-12 09:41', text: '新用户「郑博文」完成注册' },
-  { time: '10-12 08:47', text: '用户「王梓萌」提交功能异常反馈：长视频上传失败' },
-  { time: '10-11 21:40', text: '用户「林小智」提交内容纠错反馈：莱布尼茨判别法表述有误' },
-  { time: '10-11 15:40', text: '「第8讲 二叉树与遍历」纪要生成完成（上传者：林小智）' },
-]
+let dashboardLoading: Promise<void> | null = null
+export function ensureDashboardLoaded(): Promise<void> {
+  if (weeklyQa.value.length || dashboardLoading) return dashboardLoading ?? Promise.resolve()
+  dashboardLoading = statsApi
+    .dashboard()
+    .then((d) => {
+      weeklyQa.value = d.weekly ?? []
+      recentEvents.value = d.events ?? []
+      dashboardCounts.value = d.counts ?? dashboardCounts.value
+    })
+    .finally(() => {
+      dashboardLoading = null
+    })
+  return dashboardLoading
+}

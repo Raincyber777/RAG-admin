@@ -204,6 +204,22 @@ export interface PlatformStats {
 
 export const statsApi = {
   summary: () => request<PlatformStats>('/stats/summary/'),
+  dashboard: () => request<DashboardData>('/stats/dashboard/'),
+}
+
+// ---------- 数据看板聚合（近 7 日问答量 / 最新动态 / 7 日增量） ----------
+export interface DashboardWeekly {
+  day: string
+  count: number
+}
+export interface DashboardEvent {
+  time: string
+  text: string
+}
+export interface DashboardData {
+  weekly: DashboardWeekly[]
+  events: DashboardEvent[]
+  counts: { users_7d: number; notes_7d: number; qa_7d: number }
 }
 
 // ---------- 公告与协议 ----------

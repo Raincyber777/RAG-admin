@@ -8,16 +8,21 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import AppIcon from '@/components/AppIcon.vue'
 import { accounts } from '@/store/auth'
-import { notes, qaRecords, quizItems, feedbacks, weeklyQa, recentEvents } from '@/store/admin'
+import {
+  notes, qaRecords, quizItems, feedbacks, weeklyQa, recentEvents, dashboardCounts, ensureDashboardLoaded,
+} from '@/store/admin'
+import type { DashboardEvent } from '@/api'
 
-// 核心指标实时来自巡检数据（近 7 日问答量与最新动态仍为演示数据）
+const delta7 = (n: number, unit: string) => (n ? `近 7 日 +${n} ${unit}` : '近 7 日无新增')
+
+// 核心指标实时来自巡检数据；近 7 日增量来自 /api/stats/dashboard/
 const stats = computed(() => {
   const userCount = accounts.filter((a) => a.role === 'user').length
   const pendingCount = feedbacks.filter((f) => f.status === '待处理').length
   return [
-    { label: '用户总数', value: userCount, icon: 'users', tint: 'st-lavender', delta: '较上周 +1' },
-    { label: '课堂纪要', value: notes.length, icon: 'book', tint: 'st-sky', delta: '本周新增 3' },
-    { label: '问答记录', value: qaRecords.length, icon: 'chat', tint: 'st-mint', delta: '近 7 日 ' + weeklyQa.reduce((s, w) => s + w.count, 0) + ' 次' },
+    { label: '用户总数', value: userCount, icon: 'users', tint: 'st-lavender', delta: delta7(dashboardCounts.value.users_7d, '人') },
+    { label: '课堂纪要', value: notes.length, icon: 'book', tint: 'st-sky', delta: delta7(dashboardCounts.value.notes_7d, '份') },
+    { label: '问答记录', value: qaRecords.length, icon: 'chat', tint: 'st-mint', delta: `近 7 日 ${weeklyQa.value.reduce((s, w) => s + w.count, 0)} 次` },
     { label: '练习题库', value: quizItems.length, icon: 'edit', tint: 'st-peach', delta: `覆盖 ${new Set(notes.map((n) => n.course)).size} 门课程` },
     { label: '待处理反馈', value: pendingCount, icon: 'flag', tint: 'st-rose', delta: pendingCount ? '需要尽快处理' : '暂无待办' },
   ]
@@ -37,10 +42,8 @@ const TOOLTIP_STYLE = {
   extraCssText: 'box-shadow: 0 8px 24px rgba(10,21,48,0.12); border-radius: 10px;',
 }
 
-function initTrend() {
-  if (!trendRef.value) return
-  trendChart = echarts.init(trendRef.value)
-  trendChart.setOption({
+function trendOption() {
+  return {
     grid: { left: 6, right: 6, top: 30, bottom: 2, containLabel: true },
     tooltip: {
       trigger: 'axis',
@@ -52,7 +55,7 @@ function initTrend() {
       },
     },
     xAxis: {
-      type: 'category', data: weeklyQa.map((w) => w.day), boundaryGap: true,
+      type: 'category', data: weeklyQa.value.map((w) => w.day), boundaryGap: true,
       axisLine: { lineStyle: { color: '#eceef2' } }, axisTick: { show: false },
       axisLabel: { color: '#9aa3b2', fontSize: 11 },
     },
@@ -63,7 +66,7 @@ function initTrend() {
     },
     series: [{
       type: 'bar',
-      data: weeklyQa.map((w) => w.count),
+      data: weeklyQa.value.map((w) => w.count),
       barWidth: '44%',
       itemStyle: {
         borderRadius: [8, 8, 0, 0],
@@ -76,8 +79,17 @@ function initTrend() {
       backgroundStyle: { color: '#f5f6f9', borderRadius: [8, 8, 0, 0] },
       label: { show: true, position: 'top', color: '#5b6472', fontSize: 11, fontWeight: 600 },
     }],
-  })
+  }
 }
+
+function initTrend() {
+  if (!trendRef.value) return
+  trendChart = echarts.init(trendRef.value)
+  trendChart.setOption(trendOption())
+}
+
+// 看板数据异步到达后刷新趋势图
+watch(weeklyQa, () => trendChart?.setOption(trendOption()))
 
 // ---------- ECharts：课程分布（按纪要数） ----------
 const courseDist = computed(() => {
@@ -131,6 +143,8 @@ onMounted(() => {
   initTrend()
   initDist()
   window.addEventListener('resize', onResize)
+  // 近 7 日问答量与最新动态：进页面拉取（失败静默，显示空态）
+  void ensureDashboardLoaded().catch(() => {})
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
@@ -160,22 +174,25 @@ const maxHot = computed(() => Math.max(...hotWords.value.map((w) => w.count), 1)
 const hotSize = (c: number) => 12 + Math.round((c / maxHot.value) * 6)
 const hotTag = (i: number) => ['tag-purple', 'tag-blue', 'tag-green', 'tag-orange', 'tag-yellow'][i % 5]
 
-// ---------- 最新动态：轮播覆盖 ----------
+// ---------- 最新动态：轮播覆盖（数据来自 /api/stats/dashboard/） ----------
 const FEED_SHOW = 5
 const feedOffset = ref(0)
 let feedTimer: number | null = null
 onMounted(() => {
   feedTimer = window.setInterval(() => {
-    feedOffset.value = (feedOffset.value + 1) % recentEvents.length
+    const n = recentEvents.value.length
+    if (!n) return
+    feedOffset.value = (feedOffset.value + 1) % n
   }, 3500)
 })
 onBeforeUnmount(() => {
   if (feedTimer) window.clearInterval(feedTimer)
 })
-const visibleEvents = computed(() => {
-  const out: typeof recentEvents = []
-  for (let i = 0; i < Math.min(FEED_SHOW, recentEvents.length); i++) {
-    const e = recentEvents[(feedOffset.value + i) % recentEvents.length]
+const visibleEvents = computed<DashboardEvent[]>(() => {
+  const list = recentEvents.value
+  const out: DashboardEvent[] = []
+  for (let i = 0; i < Math.min(FEED_SHOW, list.length); i++) {
+    const e = list[(feedOffset.value + i) % list.length]
     if (e) out.push(e)
   }
   return out
@@ -244,6 +261,7 @@ const visibleEvents = computed(() => {
               <span class="event-text">{{ e.text }}</span>
               <span class="event-time">{{ e.time }}</span>
             </li>
+            <li v-if="!recentEvents.length" class="event text-caption">暂无动态</li>
           </TransitionGroup>
         </section>
       </div>
