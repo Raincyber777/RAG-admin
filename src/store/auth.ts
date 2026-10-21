@@ -207,6 +207,16 @@ export async function resetPassword(acc: Account, next: string): Promise<Result>
   }
 }
 
+/** 批量重置账号密码（勾选账号统一同一初始密码，后端校验强度） */
+export async function batchResetPasswords(ids: string[], password: string): Promise<Result> {
+  try {
+    await accountsAdminApi.batchResetPassword(ids, password)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, msg: e instanceof Error ? e.message : '重置失败，请稍后再试' }
+  }
+}
+
 /** 停用 / 恢复账号（超级管理员与当前登录账号不可停用，后端校验） */
 export async function toggleStatus(acc: Account): Promise<Result> {
   try {

@@ -6,7 +6,7 @@
 import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CourseSelect from '@/components/CourseSelect.vue'
-import { qaRecords, courseDisplay, type QaRecord } from '@/store/admin'
+import { qaRecords, removeQaRecords, courseDisplay, type QaRecord } from '@/store/admin'
 
 const keyword = ref('')
 const courseFilter = ref('全部')
@@ -47,6 +47,59 @@ function setPageSize(s: number) {
 
 const detail = ref<QaRecord | null>(null)
 const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
+
+// ---------- 操作成功提示 ----------
+const tip = ref('')
+let tipTimer: number | undefined
+function showTip(text: string) {
+  tip.value = text
+  if (tipTimer) window.clearTimeout(tipTimer)
+  tipTimer = window.setTimeout(() => (tip.value = ''), 2400)
+}
+
+// ---------- 多选与批量删除 ----------
+const selected = ref<string[]>([])
+const allPageChecked = computed(() =>
+  paged.value.length > 0 && paged.value.every((q) => selected.value.includes(q.id)),
+)
+function toggleSelect(q: QaRecord) {
+  const i = selected.value.indexOf(q.id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(q.id)
+}
+function toggleSelectAll() {
+  const pageIds = paged.value.map((q) => q.id)
+  if (allPageChecked.value) {
+    selected.value = selected.value.filter((id) => !pageIds.includes(id))
+  } else {
+    selected.value = [...new Set([...selected.value, ...pageIds])]
+  }
+}
+// 筛选 / 翻页 / 切换排序后只保留仍可见的勾选，避免误删看不到的记录
+watch([keyword, courseFilter, sortBy, page], () => {
+  const visible = new Set(paged.value.map((q) => q.id))
+  selected.value = selected.value.filter((id) => visible.has(id))
+})
+
+const showBatchDel = ref(false)
+const batchBusy = ref(false)
+const batchError = ref('')
+async function confirmBatchDelete() {
+  const count = selected.value.length
+  if (!count || batchBusy.value) return
+  batchBusy.value = true
+  batchError.value = ''
+  try {
+    await removeQaRecords(selected.value)
+    showBatchDel.value = false
+    selected.value = []
+    showTip(`已删除 ${count} 条问答记录`)
+  } catch (e) {
+    batchError.value = e instanceof Error ? e.message : '删除失败，请稍后再试'
+  } finally {
+    batchBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -76,8 +129,27 @@ const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
       <CourseSelect v-model="courseFilter" />
     </div>
 
+    <p v-if="tip" class="done-tip"><AppIcon name="check" :size="14" /> {{ tip }}</p>
+
+    <div v-if="selected.length" class="batch-bar">
+      <span class="batch-count">已选 {{ selected.length }} 条记录</span>
+      <button class="btn btn-danger btn-sm" @click="showBatchDel = true"><AppIcon name="trash" :size="13" /> 批量删除</button>
+      <button class="btn btn-secondary btn-sm" @click="selected = []">取消选择</button>
+    </div>
+
     <div class="qa-list">
-      <button v-for="q in paged" :key="q.id" class="card card-hover qa-row" @click="detail = q">
+      <div
+        v-for="q in paged" :key="q.id"
+        class="card card-hover qa-row"
+        role="button" tabindex="0"
+        :aria-label="`查看问答详情：${q.question}`"
+        @click="detail = q"
+        @keydown.enter.prevent="detail = q"
+        @keydown.space.prevent="detail = q"
+      >
+        <label class="qa-check" @click.stop>
+          <input type="checkbox" class="row-check" :checked="selected.includes(q.id)" :aria-label="`选择：${q.question}`" @change="toggleSelect(q)" />
+        </label>
         <div class="qa-main">
           <div class="qa-question">{{ q.question }}</div>
           <div class="qa-meta">
@@ -87,7 +159,7 @@ const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
           </div>
         </div>
         <AppIcon name="chevron-right" :size="16" class="qa-arrow" />
-      </button>
+      </div>
       <div v-if="!filtered.length" class="card empty">
         <AppIcon name="search" :size="16" /> 没有符合条件的问答记录
       </div>
@@ -137,6 +209,19 @@ const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
         </div>
       </div>
     </div>
+
+    <!-- 批量删除确认弹窗 -->
+    <div v-if="showBatchDel" class="modal-mask" @click.self="showBatchDel = false">
+      <div class="modal modal-sm">
+        <div class="modal-title">批量删除问答记录</div>
+        <p class="modal-sub">确定删除选中的 {{ selected.length }} 条问答记录吗？名下的反馈记录将一并清除，此操作不可恢复。</p>
+        <p v-if="batchError" class="hint-err">{{ batchError }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showBatchDel = false">取消</button>
+          <button class="btn btn-danger" :disabled="batchBusy" @click="confirmBatchDelete">{{ batchBusy ? '删除中…' : '确认删除' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -156,6 +241,16 @@ const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
 .meta-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--slate); }
 .qa-arrow { color: var(--stone); flex-shrink: 0; }
 .sort-tabs { flex-shrink: 0; }
+
+/* 多选批量操作 */
+.done-tip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--brand-purple-800, #4a3bc7); background: var(--tint-lavender, #efecfd); border-radius: var(--radius-md); padding: 8px 14px; margin-bottom: 12px; }
+.batch-bar { display: flex; align-items: center; gap: 10px; background: var(--tint-rose, #feeceb); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 12px; }
+.batch-count { font-size: 13px; font-weight: 600; color: #d92d20; margin-right: auto; }
+.qa-check { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; }
+.row-check { width: 15px; height: 15px; accent-color: var(--brand-purple, #5645d4); cursor: pointer; }
+.modal-sm { max-width: 440px; width: 100%; }
+.hint-err { font-size: 13px; color: #d92d20; margin-bottom: 10px; }
+
 .empty { text-align: center; color: var(--stone); padding: 36px 0; }
 .empty svg { vertical-align: -3px; margin-right: 6px; }
 

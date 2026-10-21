@@ -26,6 +26,8 @@ const navs = [
   { path: '/admin/qa', icon: 'chat', label: '问答记录' },
   { path: '/admin/quiz', icon: 'edit', label: '题库管理' },
   { path: '/admin/feedbacks', icon: 'flag', label: '问题反馈' },
+  { path: '/admin/samples', icon: 'database', label: '训练样本' },
+  { path: '/admin/audit', icon: 'shield', label: '内容审核' },
   { path: '/admin/announcements', icon: 'horn', label: '公告管理' },
   { path: '/admin/guide', icon: 'info', label: '使用说明' },
   { path: '/admin/settings', icon: 'sliders', label: '个人设置' },

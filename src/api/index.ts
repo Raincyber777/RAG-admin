@@ -2,7 +2,7 @@
  * 后端接口清单（管理端用；与用户端共享认证与纪要等数据结构）
  * 管理端专用：/api/admin/*（账号 / 巡检 / 反馈处理 / FAQ 维护）与 /api/stats/summary/（平台口径）
  */
-import { request, listAll, buildForm } from './http'
+import { request, listAll, buildForm, BASE, getToken } from './http'
 
 export type ApiRole = 'user' | 'admin' | 'super'
 
@@ -53,6 +53,12 @@ export const accountsAdminApi = {
     request<ApiUser>('/admin/accounts/create/', { method: 'POST', data: form }),
   resetPassword: (id: string, password: string) =>
     request<{ detail: string }>(`/admin/accounts/${id}/reset_password/`, { method: 'POST', data: { password } }),
+  /** 批量重置密码：选中账号统一设置同一初始密码（至少 8 位） */
+  batchResetPassword: (ids: string[], password: string) =>
+    request<{ detail: string; updated: number }>('/admin/accounts/batch_reset_password/', {
+      method: 'POST',
+      data: { ids: ids.map(Number), password },
+    }),
   toggleStatus: (id: string) =>
     request<ApiUser>(`/admin/accounts/${id}/toggle_status/`, { method: 'POST' }),
 }
@@ -104,6 +110,12 @@ export interface ApiQaRecord {
 export const qaAdminApi = {
   list: (params: { search?: string } = {}) =>
     listAll<ApiQaRecord>('/admin/qa/', params.search ? { search: params.search } : {}),
+  /** 批量删除问答记录（名下反馈流水随级联清除） */
+  batchRemove: (ids: string[]) =>
+    request<{ detail: string; deleted: number }>('/admin/qa/batch_delete/', {
+      method: 'POST',
+      data: { ids: ids.map(Number) },
+    }),
 }
 
 // ---------- 题库（巡检） ----------
@@ -259,4 +271,79 @@ export const legalAdminApi = {
   get: (key: 'terms' | 'privacy') => request<LegalDocState>(`/admin/legal/${key}/`),
   save: (key: 'terms' | 'privacy', content: string) =>
     request<LegalDocState>(`/admin/legal/${key}/`, { method: 'PUT', data: { content } }),
+}
+
+// ---------- 训练样本（进化闭环：反馈筛选 → 生成 → 人工审核 → 导出微调素材） ----------
+export type ApiTrainStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ApiTrainSample {
+  id: number
+  record: number | null
+  note: number | null
+  note_title: string
+  query: string
+  question_rewrite: string
+  context: { text: string; ref: string; score: number }[]
+  answer: string
+  sources: { label: string; time: string; detail: string; kind?: string; url?: string }[]
+  status: ApiTrainStatus
+  reviewer_note: string
+  created_at: string
+}
+
+export const trainingAdminApi = {
+  list: (params: { status?: ApiTrainStatus } = {}) =>
+    listAll<ApiTrainSample>('/admin/training/samples/', params.status ? { status: params.status } : {}),
+  /** 按反馈信号批量生成候选样本（后端限 30 条/次并做强模型预筛），返回 {created, skipped} */
+  generate: () => request<{ created: number; skipped: number }>('/admin/training/generate/', { method: 'POST' }),
+  review: (id: number, action: 'approve' | 'reject', note = '') =>
+    request<ApiTrainSample>(`/admin/training/samples/${id}/review/`, { method: 'POST', data: { action, note } }),
+  /** 导出已通过样本为 JSONL 文件（文件下载走 blob，不经过 request 的 JSON 封装） */
+  exportJsonl: async () => {
+    const res = await fetch(`${BASE}/admin/training/samples/export/`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!res.ok) throw new Error(`导出失败（${res.status}）`)
+    return res.blob()
+  },
+}
+
+// ---------- 敏感内容审核日志（脱敏展示，只读） ----------
+export type ApiAuditKind = 'health_extract' | 'health_block' | 'political' | 'blocked'
+export type ApiAuditAction = 'extract' | 'redirect' | 'block'
+
+export interface ApiAuditLog {
+  id: number
+  user: number | null
+  user_name: string
+  kind: ApiAuditKind
+  question: string
+  action: ApiAuditAction
+  detail: Record<string, unknown>
+  created_at: string
+}
+
+export const auditAdminApi = {
+  list: (params: { kind?: ApiAuditKind } = {}) =>
+    listAll<ApiAuditLog>('/admin/audit/logs/', params.kind ? { kind: params.kind } : {}),
+}
+
+// ---------- 知识库缺口（高频无依据问题聚合，补充材料后标记闭环） ----------
+export type ApiGapStatus = 'open' | 'resolved' | 'ignored'
+
+export interface ApiKbGap {
+  id: number
+  key: string
+  question: string
+  count: number
+  status: ApiGapStatus
+  created_at: string
+  updated_at: string
+}
+
+export const gapsAdminApi = {
+  list: (params: { status?: ApiGapStatus } = {}) =>
+    listAll<ApiKbGap>('/admin/kb/gaps/', params.status ? { status: params.status } : {}),
+  resolve: (id: number) => request<ApiKbGap>(`/admin/kb/gaps/${id}/resolve/`, { method: 'POST' }),
+  ignore: (id: number) => request<ApiKbGap>(`/admin/kb/gaps/${id}/ignore/`, { method: 'POST' }),
 }

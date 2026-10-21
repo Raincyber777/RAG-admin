@@ -4,10 +4,22 @@
       <stop stop-color="#1e2249"/><stop offset="1" stop-color="#0a0c1e"/>
     </linearGradient>
     <linearGradient id="s" x1="9" y1="6" x2="25" y2="25" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#d9d3fd"/><stop offset="1" stop-color="#9d8cf1"/>
+      <stop stop-color="#d9d3fd">
+        <animate attributeName="stop-color" values="#d9d3fd;#b7a9f7;#9d8cf1;#d9d3fd" dur="4s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="1" stop-color="#9d8cf1">
+        <animate attributeName="stop-color" values="#9d8cf1;#d9d3fd;#b7a9f7;#9d8cf1" dur="4s" repeatCount="indefinite"/>
+      </stop>
     </linearGradient>
   </defs>
   <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#t)"/>
+  <!-- 主星背后的柔光晕：同造型放大复制，透明度缓慢呼吸 -->
+  <path d="M17 4C18.2 10.9 21.6 14.3 28.5 15.5C21.6 16.7 18.2 20.1 17 27C15.8 20.1 12.4 16.7 5.5 15.5C12.4 14.3 15.8 10.9 17 4Z" transform="translate(17 15.5) scale(1.25) translate(-17 -15.5)" fill="#a292f2" opacity="0.25">
+    <animate attributeName="opacity" values="0.12;0.35;0.12" dur="3s" repeatCount="indefinite"/>
+  </path>
   <path d="M17 4C18.2 10.9 21.6 14.3 28.5 15.5C21.6 16.7 18.2 20.1 17 27C15.8 20.1 12.4 16.7 5.5 15.5C12.4 14.3 15.8 10.9 17 4Z" fill="url(#s)"/>
-  <path d="M0 -2.6C0.25 -1 1 -0.25 2.6 0C1 0.25 0.25 1 0 2.6C-0.25 1 -1 0.25 -2.6 0C-1 -0.25 -0.25 -1 0 -2.6Z" transform="translate(9.5 22.5)" fill="#cfc7fb"/>
+  <!-- 星尖小晶花：缓慢闪烁 -->
+  <path d="M0 -2.6C0.25 -1 1 -0.25 2.6 0C1 0.25 0.25 1 0 2.6C-0.25 1 -1 0.25 -2.6 0C-1 -0.25 -0.25 -1 0 -2.6Z" transform="translate(9.5 22.5)" fill="#cfc7fb">
+    <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite"/>
+  </path>
 </svg>

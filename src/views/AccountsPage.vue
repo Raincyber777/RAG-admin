@@ -9,7 +9,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import {
   accounts, session, isSuper, maskPhone, maskEmail,
-  createAdmin, resetPassword, toggleStatus, type Account,
+  createAdmin, resetPassword, batchResetPasswords, toggleStatus, type Account,
 } from '@/store/auth'
 
 const roleCat = ref('all') // 'all' | 'user' | 'admin'
@@ -184,6 +184,60 @@ function showTip(text: string) {
   if (tipTimer) window.clearTimeout(tipTimer)
   tipTimer = window.setTimeout(() => (tip.value = ''), 2400)
 }
+
+// ---------- 多选与批量重置密码 ----------
+const selected = ref<string[]>([])
+const allPageChecked = computed(() =>
+  paged.value.length > 0 && paged.value.every((a) => selected.value.includes(a.id)),
+)
+function toggleSelect(a: Account) {
+  const i = selected.value.indexOf(a.id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(a.id)
+}
+function toggleSelectAll() {
+  const pageIds = paged.value.map((a) => a.id)
+  if (allPageChecked.value) {
+    selected.value = selected.value.filter((id) => !pageIds.includes(id))
+  } else {
+    selected.value = [...new Set([...selected.value, ...pageIds])]
+  }
+}
+// 筛选 / 翻页后只保留仍可见的勾选，避免误操作看不到的账号
+watch([keyword, roleCat, statusCat, page], () => {
+  const visible = new Set(paged.value.map((a) => a.id))
+  selected.value = selected.value.filter((id) => visible.has(id))
+})
+
+const showBatchReset = ref(false)
+const batchNext = ref('')
+const batchError = ref('')
+const batchBusy = ref(false)
+function openBatchReset() {
+  if (!selected.value.length) return
+  batchNext.value = ''
+  batchError.value = ''
+  showBatchReset.value = true
+}
+async function confirmBatchReset() {
+  const count = selected.value.length
+  if (!count || batchBusy.value) return
+  if (batchNext.value.length < 8) {
+    batchError.value = '初始密码至少需要 8 位'
+    return
+  }
+  batchBusy.value = true
+  batchError.value = ''
+  const res = await batchResetPasswords(selected.value, batchNext.value)
+  batchBusy.value = false
+  if (!res.ok) {
+    batchError.value = res.msg || '重置失败，请稍后再试'
+    return
+  }
+  showBatchReset.value = false
+  selected.value = []
+  showTip(`已为 ${count} 个账号统一重置密码`)
+}
 </script>
 
 <template>
@@ -216,11 +270,18 @@ function showTip(text: string) {
 
     <p v-if="tip" class="done-tip"><AppIcon name="check" :size="14" /> {{ tip }}</p>
 
+    <div v-if="selected.length" class="batch-bar">
+      <span class="batch-count">已选 {{ selected.length }} 个账号</span>
+      <button class="btn btn-primary btn-sm" @click="openBatchReset"><AppIcon name="lock" :size="13" /> 批量重置密码</button>
+      <button class="btn btn-secondary btn-sm" @click="selected = []">取消选择</button>
+    </div>
+
     <div class="card table-card">
       <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
+              <th class="th-check"><input type="checkbox" class="row-check" :checked="allPageChecked" aria-label="全选本页" @change="toggleSelectAll" /></th>
               <th>账号</th>
               <th>角色</th>
               <th>手机号</th>
@@ -234,6 +295,9 @@ function showTip(text: string) {
           </thead>
           <tbody>
             <tr v-for="a in paged" :key="a.id">
+              <td class="td-check">
+                <input type="checkbox" class="row-check" :checked="selected.includes(a.id)" :aria-label="`选择 ${a.name}`" @change="toggleSelect(a)" />
+              </td>
               <td>
                 <div class="user-cell">
                   <img v-if="a.avatar" :src="a.avatar" class="avatar avatar-sm avatar-photo" :alt="a.name + ' 的头像'" />
@@ -265,7 +329,7 @@ function showTip(text: string) {
               </td>
             </tr>
             <tr v-if="!sorted.length">
-              <td colspan="9" class="empty">
+              <td colspan="10" class="empty">
                 <AppIcon name="search" :size="16" /> 没有符合条件的账号
               </td>
             </tr>
@@ -369,6 +433,23 @@ function showTip(text: string) {
         </div>
       </div>
     </div>
+
+    <!-- 批量重置密码弹窗 -->
+    <div v-if="showBatchReset" class="modal-mask" @click.self="showBatchReset = false">
+      <div class="modal modal-sm">
+        <div class="modal-title">批量重置密码</div>
+        <p class="modal-sub">将为选中的 {{ selected.length }} 个账号统一设置初始密码，重置后原密码立即失效，请线下告知本人。</p>
+        <div class="field">
+          <label class="field-label">统一初始密码</label>
+          <input v-model="batchNext" class="input" type="text" placeholder="至少 8 位，建议包含字母与数字" @input="batchError = ''" />
+          <p v-if="batchError" class="field-hint hint-err">{{ batchError }}</p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showBatchReset = false">取消</button>
+          <button class="btn btn-primary" :disabled="batchBusy" @click="confirmBatchReset">{{ batchBusy ? '重置中…' : '确认重置' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -405,6 +486,16 @@ function showTip(text: string) {
 .link-btn:hover { background: var(--tint-sky); }
 .link-danger { color: #d92d20; }
 .link-danger:hover { background: var(--tint-rose); }
+
+/* 多选批量操作 */
+.batch-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--tint-lavender); border-radius: var(--radius-md);
+  padding: 9px 14px; margin-bottom: 12px;
+}
+.batch-count { font-size: 13px; font-weight: 600; color: var(--brand-purple-800); margin-right: auto; }
+.th-check, .td-check { width: 40px; }
+.row-check { width: 15px; height: 15px; accent-color: var(--brand-purple, #5645d4); cursor: pointer; }
 
 /* 分页条（与工作台 FAQ 管理卡一致） */
 .pager { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }

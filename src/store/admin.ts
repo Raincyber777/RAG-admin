@@ -7,7 +7,9 @@ import { reactive, ref, computed } from 'vue'
 
 import {
   notesAdminApi, qaAdminApi, quizAdminApi, feedbackAdminApi, statsApi,
+  trainingAdminApi, auditAdminApi, gapsAdminApi,
   type ApiNote, type ApiQaRecord, type ApiQuizItem, type ApiFeedback,
+  type ApiTrainSample, type ApiAuditLog, type ApiKbGap,
   type DashboardWeekly, type DashboardEvent,
 } from '@/api'
 import { mediaUrl } from '@/api/http'
@@ -108,6 +110,13 @@ export function ensureQaLoaded(): Promise<void> {
     })()
   }
   return qaInFlight
+}
+
+/** 批量删除问答记录（后端级联清除名下反馈流水），成功后同步本地列表 */
+export async function removeQaRecords(ids: string[]) {
+  await qaAdminApi.batchRemove(ids)
+  const gone = new Set(ids)
+  qaRecords.splice(0, qaRecords.length, ...qaRecords.filter((q) => !gone.has(q.id)))
 }
 
 // ---------- 题库（对应用户端「自创题练习 / 错题本」） ----------
@@ -226,6 +235,183 @@ export async function resolveFeedback(id: string) {
 }
 
 export const pendingFeedbackCount = () => feedbacks.filter((f) => f.status === '待处理').length
+
+// ---------- 训练样本（进化闭环：反馈筛选 → 生成 → 人工审核 → 导出） ----------
+export type TrainSampleStatus = '待审核' | '已通过' | '已驳回'
+
+export interface TrainSample {
+  id: string
+  query: string
+  rewrite: string
+  context: { text: string; ref: string; score: number }[]
+  answer: string
+  sources: ApiTrainSample['sources']
+  noteTitle: string
+  status: TrainSampleStatus
+  reviewerNote: string
+  time: string
+}
+
+function sampleFromApi(s: ApiTrainSample): TrainSample {
+  return {
+    id: String(s.id),
+    query: s.query,
+    rewrite: s.question_rewrite,
+    context: s.context ?? [],
+    answer: s.answer,
+    sources: s.sources ?? [],
+    noteTitle: s.note_title,
+    status: s.status === 'approved' ? '已通过' : s.status === 'rejected' ? '已驳回' : '待审核',
+    reviewerNote: s.reviewer_note,
+    time: s.created_at,
+  }
+}
+
+export const trainSamples = reactive<TrainSample[]>([])
+
+let samplesInFlight: Promise<void> | null = null
+export function ensureSamplesLoaded(): Promise<void> {
+  if (!samplesInFlight) {
+    samplesInFlight = (async () => {
+      try {
+        const list = await trainingAdminApi.list()
+        trainSamples.splice(0, trainSamples.length, ...list.map(sampleFromApi))
+      } finally {
+        samplesInFlight = null
+      }
+    })()
+  }
+  return samplesInFlight
+}
+
+/** 人工审核（approve / reject），先调后端成功后同步本地状态 */
+export async function reviewSample(id: string, approve: boolean, note = '') {
+  const s = await trainingAdminApi.review(Number(id), approve ? 'approve' : 'reject', note)
+  const local = trainSamples.find((x) => x.id === id)
+  if (local) Object.assign(local, sampleFromApi(s))
+}
+
+/** 批量生成候选样本；完成后重拉列表保持一致，返回 {created, skipped} */
+export async function generateSamples() {
+  const r = await trainingAdminApi.generate()
+  await ensureSamplesLoaded().catch(() => {})
+  return r
+}
+
+/** 导出已通过样本 JSONL 并触发浏览器下载（仅 approved） */
+export async function exportSamplesJsonl() {
+  const blob = await trainingAdminApi.exportJsonl()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'training_samples.jsonl'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ---------- 知识库缺口（无依据问题聚合，补充材料后闭环） ----------
+export type GapStatus = '待补充' | '已补充' | '已忽略'
+
+export interface KbGap {
+  id: string
+  question: string
+  count: number
+  status: GapStatus
+  time: string
+}
+
+function gapFromApi(g: ApiKbGap): KbGap {
+  return {
+    id: String(g.id),
+    question: g.question,
+    count: g.count,
+    status: g.status === 'resolved' ? '已补充' : g.status === 'ignored' ? '已忽略' : '待补充',
+    time: g.updated_at,
+  }
+}
+
+export const kbGaps = reactive<KbGap[]>([])
+
+let gapsInFlight: Promise<void> | null = null
+export function ensureGapsLoaded(): Promise<void> {
+  if (!gapsInFlight) {
+    gapsInFlight = (async () => {
+      try {
+        const list = await gapsAdminApi.list()
+        kbGaps.splice(0, kbGaps.length, ...list.map(gapFromApi))
+      } finally {
+        gapsInFlight = null
+      }
+    })()
+  }
+  return gapsInFlight
+}
+
+export async function resolveGap(id: string) {
+  const g = await gapsAdminApi.resolve(Number(id))
+  const local = kbGaps.find((x) => x.id === id)
+  if (local) Object.assign(local, gapFromApi(g))
+}
+
+export async function ignoreGap(id: string) {
+  const g = await gapsAdminApi.ignore(Number(id))
+  const local = kbGaps.find((x) => x.id === id)
+  if (local) Object.assign(local, gapFromApi(g))
+}
+
+// ---------- 敏感内容审核日志（脱敏只读） ----------
+export interface AuditLog {
+  id: string
+  user: string
+  kind: ApiAuditLog['kind']
+  kindText: string
+  actionText: string
+  question: string
+  detail: Record<string, unknown>
+  time: string
+}
+
+const KIND_TEXT: Record<ApiAuditLog['kind'], string> = {
+  health_extract: '健康建档',
+  health_block: '健康拦截',
+  political: '政治引导',
+  blocked: '违规拦截',
+}
+const ACTION_TEXT: Record<ApiAuditLog['action'], string> = {
+  extract: '建档',
+  redirect: '引导回学习',
+  block: '拦截',
+}
+
+function auditFromApi(a: ApiAuditLog): AuditLog {
+  return {
+    id: String(a.id),
+    user: a.user_name || '已注销用户',
+    kind: a.kind,
+    kindText: KIND_TEXT[a.kind] ?? a.kind,
+    actionText: ACTION_TEXT[a.action] ?? a.action,
+    question: a.question,
+    detail: a.detail ?? {},
+    time: a.created_at,
+  }
+}
+
+export const auditLogs = reactive<AuditLog[]>([])
+
+let auditInFlight: Promise<void> | null = null
+export function ensureAuditLoaded(): Promise<void> {
+  if (!auditInFlight) {
+    auditInFlight = (async () => {
+      try {
+        const list = await auditAdminApi.list()
+        auditLogs.splice(0, auditLogs.length, ...list.map(auditFromApi))
+      } finally {
+        auditInFlight = null
+      }
+    })()
+  }
+  return auditInFlight
+}
 
 // ---------- 所属课程表 ----------
 // courseList 保存用户端的「原始课程名」；管理端的改名是别名（alias），仅影响管理端显示：
