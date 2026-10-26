@@ -228,6 +228,21 @@ export async function removeNote(id: string) {
   await Promise.all([ensureQaLoaded().catch(() => {}), ensureQuizLoaded().catch(() => {})])
 }
 
+/** 批量删除纪要（名下问答 / 练习 / 错题由后端级联清除），成功后同步本地列表 */
+export async function removeNotes(ids: string[]) {
+  await notesAdminApi.batchRemove(ids)
+  const gone = new Set(ids)
+  notes.splice(0, notes.length, ...notes.filter((n) => !gone.has(n.id)))
+  await Promise.all([ensureQaLoaded().catch(() => {}), ensureQuizLoaded().catch(() => {})])
+}
+
+/** 批量删除题目（名下错题由后端级联清除），成功后同步本地列表 */
+export async function removeQuizItems(ids: string[]) {
+  await quizAdminApi.batchRemove(ids)
+  const gone = new Set(ids)
+  quizItems.splice(0, quizItems.length, ...quizItems.filter((q) => !gone.has(q.id)))
+}
+
 export async function resolveFeedback(id: string) {
   await feedbackAdminApi.resolve(id)
   const f = feedbacks.find((x) => x.id === id)

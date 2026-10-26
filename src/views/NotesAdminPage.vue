@@ -7,7 +7,7 @@
 import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CourseSelect from '@/components/CourseSelect.vue'
-import { notes, removeNote, courseDisplay, type AdminNote } from '@/store/admin'
+import { notes, removeNote, removeNotes, courseDisplay, type AdminNote } from '@/store/admin'
 
 const keyword = ref('')
 const courseFilter = ref('全部')
@@ -54,6 +54,46 @@ async function confirmDelete() {
     deleteError.value = e instanceof Error ? e.message : '删除失败，请确认后端已启动'
   }
 }
+
+// ---------- 多选与批量删除 ----------
+const selected = ref<string[]>([])
+// 全选的口径是「当前筛选下的全部纪要」（跨页）；半选态用于勾了一部分时的展示
+const allChecked = computed(() => filtered.value.length > 0 && filtered.value.every((n) => selected.value.includes(n.id)))
+const someChecked = computed(() => selected.value.length > 0 && !allChecked.value)
+function toggleSelect(n: AdminNote) {
+  const i = selected.value.indexOf(n.id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(n.id)
+}
+/** 一键全选 / 取消全选（跨页，含未翻到的记录，删除前弹窗会再次确认条数） */
+function toggleSelectAll() {
+  if (allChecked.value) selected.value = []
+  else selected.value = filtered.value.map((n) => n.id)
+}
+// 筛选后结果集变了，只保留仍在结果里的勾选，避免误删看不到的记录（翻页不清）
+watch([keyword, courseFilter], () => {
+  const visible = new Set(filtered.value.map((n) => n.id))
+  selected.value = selected.value.filter((id) => visible.has(id))
+})
+
+const showBatchDel = ref(false)
+const batchBusy = ref(false)
+const batchError = ref('')
+async function confirmBatchDelete() {
+  const count = selected.value.length
+  if (!count || batchBusy.value) return
+  batchBusy.value = true
+  batchError.value = ''
+  try {
+    await removeNotes(selected.value)
+    showBatchDel.value = false
+    selected.value = []
+  } catch (e) {
+    batchError.value = e instanceof Error ? e.message : '删除失败，请稍后再试'
+  } finally {
+    batchBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -71,8 +111,17 @@ async function confirmDelete() {
       <CourseSelect v-model="courseFilter" />
     </div>
 
+    <div v-if="selected.length" class="batch-bar">
+      <span class="batch-count">已选 {{ selected.length }} 份纪要</span>
+      <button class="btn btn-danger btn-sm" @click="showBatchDel = true"><AppIcon name="trash" :size="13" /> 批量删除</button>
+      <button class="btn btn-secondary btn-sm" @click="selected = []">取消选择</button>
+    </div>
+
     <div class="note-list">
       <div v-for="n in paged" :key="n.id" class="card note-row">
+        <label class="note-check" @click.stop>
+          <input type="checkbox" class="row-check" :checked="selected.includes(n.id)" :aria-label="`选择：${n.title}`" @change="toggleSelect(n)" />
+        </label>
         <div class="note-main">
           <div class="note-title-line">
             <span class="note-title">{{ n.title }}</span>
@@ -95,9 +144,15 @@ async function confirmDelete() {
       </div>
     </div>
 
-    <!-- 分页条：每页 10 / 20 / 30 条 -->
+    <!-- 分页条：全选 + 每页 10 / 20 / 30 条 -->
     <div class="pager">
-      <span class="pager-info">共 {{ filtered.length }} 份</span>
+      <div class="pager-info">
+        共 {{ filtered.length }} 份
+        <label class="sel-all">
+          <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部纪要" @change="toggleSelectAll" />
+          全选
+        </label>
+      </div>
       <div class="pager-size">
         <span class="pager-label">每页</span>
         <div class="seg-tabs">
@@ -172,6 +227,19 @@ async function confirmDelete() {
         </div>
       </div>
     </div>
+
+    <!-- 批量删除确认弹窗 -->
+    <div v-if="showBatchDel" class="modal-mask" @click.self="showBatchDel = false">
+      <div class="modal modal-sm">
+        <div class="modal-title">批量删除课堂纪要</div>
+        <p class="modal-sub">确定删除选中的 {{ selected.length }} 份纪要吗？纪要名下的问答记录（含反馈）、自创题与错题将一并清除，此操作不可恢复。</p>
+        <p v-if="batchError" class="modal-sub hint-err">{{ batchError }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showBatchDel = false">取消</button>
+          <button class="btn btn-danger" :disabled="batchBusy" @click="confirmBatchDelete">{{ batchBusy ? '删除中…' : '确认删除' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -184,7 +252,13 @@ async function confirmDelete() {
 .search-box .input { padding-left: 32px; }
 
 .note-list { display: flex; flex-direction: column; gap: 10px; }
-.note-row { display: flex; align-items: center; gap: 16px; padding: 16px 18px; }
+.note-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; }
+.note-check { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; }
+.row-check { width: 17px; height: 17px; accent-color: var(--brand-purple, #5645d4); cursor: pointer; }
+/* 多选批量操作 */
+.batch-bar { display: flex; align-items: center; gap: 10px; background: var(--tint-rose, #feeceb); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 12px; }
+.batch-count { font-size: 13px; font-weight: 600; color: #d92d20; margin-right: auto; }
+.sel-all { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; cursor: pointer; user-select: none; }
 .note-main { flex: 1; min-width: 0; }
 .note-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .note-title { font-size: 14.5px; font-weight: 700; }

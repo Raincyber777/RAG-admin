@@ -31,9 +31,11 @@ const boards = [
   { icon: 'star', tint: 'bo-lavender', name: '工作台', desc: '登录后的默认页：数据速览、常用入口，以及一键进入用户端', note: '' },
   { icon: 'chart', tint: 'bo-sky', name: '数据看板', desc: '近 7 日问答量、课程分布、实时热门追问词与滚动动态，掌握平台整体运行情况', note: '' },
   { icon: 'users', tint: 'bo-mint', name: '账号管理', desc: '统一管理用户与管理员账号：搜索、分类筛选（全部 / 用户 / 管理员 / 启用 / 已停用）、重置密码、停用或恢复；新注册账号排在前面', note: '' },
-  { icon: 'book', tint: 'bo-yellow', name: '课堂纪要', desc: '查看用户生成的全部纪要详情（主题 / 知识点 / 定义 / 重点问题），可删除违规内容', note: '' },
-  { icon: 'chat', tint: 'bo-lavender', name: '问答记录', desc: '查看智能问答明细，每条回答均带录音时间戳或板书页码溯源', note: '' },
-  { icon: 'edit', tint: 'bo-sky', name: '题库管理', desc: '查看练习题（单选 / 多选 / 不定项 / 简答）的题干、选项与参考答案', note: '' },
+  { icon: 'book', tint: 'bo-yellow', name: '课堂纪要', desc: '查看用户生成的全部纪要详情（主题 / 知识点 / 定义 / 重点问题），可勾选批量删除违规内容（名下问答与练习一并清除）', note: '' },
+  { icon: 'chat', tint: 'bo-lavender', name: '问答记录', desc: '查看智能问答明细，回答内网址可点击直达、来源说明分区展示，溯源出处标注录音时间戳或板书页码；支持全选批量删除', note: '' },
+  { icon: 'edit', tint: 'bo-sky', name: '题库管理', desc: '查看练习题（单选 / 多选 / 不定项 / 简答）的题干、选项与参考答案，支持全选批量删除', note: '' },
+  { icon: 'database', tint: 'bo-mint', name: '训练样本', desc: '对话数据飞轮：从用户真实问答中筛出高质量样本（点赞 / 复制等正反馈），由 AI 过滤后进入「待审核」队列，人工通过后可导出为 JSONL 微调语料，用于后续检索调优与模型训练', note: '' },
+  { icon: 'shield', tint: 'bo-peach', name: '内容审核', desc: '敏感内容审计日志：健康信息抽取、禁忌阻断、违规拦截等处理记录（内容脱敏展示），只读留痕', note: '' },
   { icon: 'flag', tint: 'bo-peach', name: '问题反馈', desc: '查看用户提交的反馈标题、详细描述与截图，标记已处理', note: '' },
   { icon: 'horn', tint: 'bo-yellow', name: '公告管理', desc: '发布公告（发布者本人不弹提醒）、点击卡片查看完整内容、直接编辑修改（需确认，不重新提醒）、撤回与批量删除；「发布日志」全程留痕', note: '' },
   { icon: 'sliders', tint: 'bo-mint', name: '个人设置', desc: '维护头像、用户名、手机号、邮箱与密码，修改即时同步侧边栏', note: '' },
@@ -102,6 +104,11 @@ const DEFAULT_FAQS = [
     id: 'd4',
     q: '数据看板上的数字是真实的吗？',
     a: '看板核心指标实时来自后端统计接口。常见问题均可在工作台维护并同步到本页。',
+  },
+  {
+    id: 'd5',
+    q: '「训练样本」页是干嘛的？生成样本和 JSONL 导出是什么意思？',
+    a: '训练样本用于沉淀高质量问答数据：系统从真实问答中挑出带正反馈（点赞 / 复制）且有据可依的记录，点「生成样本」由 AI 清洗过滤后进入「待审核」队列；管理员逐条审核，通过后点「导出 JSONL」下载标准训练语料文件（每行一个样本，含问题 / 上下文 / 答案 / 来源），可直接用于模型微调或检索调优。审核不通过的样本不会出现在导出里。',
   },
 ]
 const faqItemsAll = computed(() => (storeFaqs.admin.length ? storeFaqs.admin : DEFAULT_FAQS))

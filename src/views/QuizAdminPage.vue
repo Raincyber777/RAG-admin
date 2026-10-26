@@ -7,7 +7,7 @@ import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppSelect, { type SelectOption } from '@/components/AppSelect.vue'
 import CourseSelect from '@/components/CourseSelect.vue'
-import { quizItems, courseDisplay, type QuizItem, type QuizType } from '@/store/admin'
+import { quizItems, removeQuizItems, courseDisplay, type QuizItem, type QuizType } from '@/store/admin'
 
 const keyword = ref('')
 const courseFilter = ref('全部')
@@ -55,6 +55,46 @@ const stats = computed(() => [
 const detail = ref<QuizItem | null>(null)
 const typeTag = (t: QuizType) =>
   t === '单选' ? 'tag-blue' : t === '多选' ? 'tag-purple' : t === '不定项' ? 'tag-orange' : 'tag-green'
+
+// ---------- 多选与批量删除 ----------
+const selected = ref<string[]>([])
+// 全选的口径是「当前筛选下的全部题目」（跨页）；半选态用于勾了一部分时的展示
+const allChecked = computed(() => filtered.value.length > 0 && filtered.value.every((q) => selected.value.includes(q.id)))
+const someChecked = computed(() => selected.value.length > 0 && !allChecked.value)
+function toggleSelect(q: QuizItem) {
+  const i = selected.value.indexOf(q.id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(q.id)
+}
+/** 一键全选 / 取消全选（跨页，含未翻到的记录，删除前弹窗会再次确认条数） */
+function toggleSelectAll() {
+  if (allChecked.value) selected.value = []
+  else selected.value = filtered.value.map((q) => q.id)
+}
+// 筛选后结果集变了，只保留仍在结果里的勾选，避免误删看不到的记录（翻页不清）
+watch([keyword, courseFilter, typeFilter], () => {
+  const visible = new Set(filtered.value.map((q) => q.id))
+  selected.value = selected.value.filter((id) => visible.has(id))
+})
+
+const showBatchDel = ref(false)
+const batchBusy = ref(false)
+const batchError = ref('')
+async function confirmBatchDelete() {
+  const count = selected.value.length
+  if (!count || batchBusy.value) return
+  batchBusy.value = true
+  batchError.value = ''
+  try {
+    await removeQuizItems(selected.value)
+    showBatchDel.value = false
+    selected.value = []
+  } catch (e) {
+    batchError.value = e instanceof Error ? e.message : '删除失败，请稍后再试'
+  } finally {
+    batchBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -82,8 +122,25 @@ const typeTag = (t: QuizType) =>
       </div>
     </div>
 
+    <div v-if="selected.length" class="batch-bar">
+      <span class="batch-count">已选 {{ selected.length }} 题</span>
+      <button class="btn btn-danger btn-sm" @click="showBatchDel = true"><AppIcon name="trash" :size="13" /> 批量删除</button>
+      <button class="btn btn-secondary btn-sm" @click="selected = []">取消选择</button>
+    </div>
+
     <div class="quiz-list">
-      <button v-for="q in paged" :key="q.id" class="card card-hover quiz-row" @click="detail = q">
+      <div
+        v-for="q in paged" :key="q.id"
+        class="card card-hover quiz-row"
+        role="button" tabindex="0"
+        :aria-label="`查看题目详情：${q.stem}`"
+        @click="detail = q"
+        @keydown.enter.prevent="detail = q"
+        @keydown.space.prevent="detail = q"
+      >
+        <label class="quiz-check" @click.stop>
+          <input type="checkbox" class="row-check" :checked="selected.includes(q.id)" :aria-label="`选择：${q.stem}`" @change="toggleSelect(q)" />
+        </label>
         <div class="quiz-main">
           <div class="quiz-stem">
             <span class="tag" :class="typeTag(q.type)">{{ q.type }}</span>
@@ -97,15 +154,21 @@ const typeTag = (t: QuizType) =>
           </div>
         </div>
         <AppIcon name="chevron-right" :size="16" class="quiz-arrow" />
-      </button>
+      </div>
       <div v-if="!filtered.length" class="card empty">
         <AppIcon name="search" :size="16" /> 没有符合条件的题目
       </div>
     </div>
 
-    <!-- 分页条：每页 10 / 20 / 30 条 -->
+    <!-- 分页条：全选 + 每页 10 / 20 / 30 条 -->
     <div class="pager">
-      <span class="pager-info">共 {{ filtered.length }} 题</span>
+      <div class="pager-info">
+        共 {{ filtered.length }} 题
+        <label class="sel-all">
+          <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部题目" @change="toggleSelectAll" />
+          全选
+        </label>
+      </div>
       <div class="pager-size">
         <span class="pager-label">每页</span>
         <div class="seg-tabs">
@@ -148,6 +211,19 @@ const typeTag = (t: QuizType) =>
         </div>
       </div>
     </div>
+
+    <!-- 批量删除确认弹窗 -->
+    <div v-if="showBatchDel" class="modal-mask" @click.self="showBatchDel = false">
+      <div class="modal modal-sm">
+        <div class="modal-title">批量删除题目</div>
+        <p class="modal-sub">确定删除选中的 {{ selected.length }} 道题目吗？题目名下的错题记录将一并清除，此操作不可恢复。</p>
+        <p v-if="batchError" class="modal-sub hint-err">{{ batchError }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showBatchDel = false">取消</button>
+          <button class="btn btn-danger" :disabled="batchBusy" @click="confirmBatchDelete">{{ batchBusy ? '删除中…' : '确认删除' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -184,6 +260,13 @@ const typeTag = (t: QuizType) =>
 
 .quiz-list { display: flex; flex-direction: column; gap: 10px; }
 .quiz-row { display: flex; align-items: center; gap: 14px; padding: 15px 18px; cursor: pointer; width: 100%; text-align: left; }
+.quiz-check { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; }
+.row-check { width: 17px; height: 17px; accent-color: var(--brand-purple, #5645d4); cursor: pointer; }
+/* 多选批量操作 */
+.batch-bar { display: flex; align-items: center; gap: 10px; background: var(--tint-rose, #feeceb); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 12px; }
+.batch-count { font-size: 13px; font-weight: 600; color: #d92d20; margin-right: auto; }
+.sel-all { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; cursor: pointer; user-select: none; }
+.hint-err { color: #d92d20; }
 .quiz-main { flex: 1; min-width: 0; }
 .quiz-stem { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
 .stem-text { font-size: 13.5px; font-weight: 600; line-height: 1.5; }

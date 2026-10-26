@@ -91,6 +91,12 @@ export const notesAdminApi = {
       ...(params.search ? { search: params.search } : {}),
     }),
   remove: (id: string) => request<void>(`/notes/${id}/`, { method: 'DELETE' }),
+  /** 批量删除纪要（名下问答 / 练习 / 错题随级联清除） */
+  batchRemove: (ids: string[]) =>
+    request<{ detail: string; deleted: number }>('/admin/notes/batch_delete/', {
+      method: 'POST',
+      data: { ids: ids.map(Number) },
+    }),
 }
 
 // ---------- 问答记录（巡检） ----------
@@ -142,6 +148,12 @@ export const quizAdminApi = {
       ...(params.course ? { course: params.course } : {}),
       ...(params.type ? { type: params.type } : {}),
       ...(params.search ? { search: params.search } : {}),
+    }),
+  /** 批量删除题目（名下错题随级联清除） */
+  batchRemove: (ids: string[]) =>
+    request<{ detail: string; deleted: number }>('/admin/quiz/batch_delete/', {
+      method: 'POST',
+      data: { ids: ids.map(Number) },
     }),
 }
 

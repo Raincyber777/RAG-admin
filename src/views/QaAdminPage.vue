@@ -89,25 +89,22 @@ function showTip(text: string) {
 
 // ---------- 多选与批量删除 ----------
 const selected = ref<string[]>([])
-const allPageChecked = computed(() =>
-  paged.value.length > 0 && paged.value.every((q) => selected.value.includes(q.id)),
-)
+// 全选的口径是「当前筛选下的全部记录」（跨页）；半选态用于勾了一部分时的展示
+const allChecked = computed(() => sorted.value.length > 0 && sorted.value.every((q) => selected.value.includes(q.id)))
+const someChecked = computed(() => selected.value.length > 0 && !allChecked.value)
 function toggleSelect(q: QaRecord) {
   const i = selected.value.indexOf(q.id)
   if (i >= 0) selected.value.splice(i, 1)
   else selected.value.push(q.id)
 }
+/** 一键全选 / 取消全选（跨页，含未翻到的记录，删除前弹窗会再次确认条数） */
 function toggleSelectAll() {
-  const pageIds = paged.value.map((q) => q.id)
-  if (allPageChecked.value) {
-    selected.value = selected.value.filter((id) => !pageIds.includes(id))
-  } else {
-    selected.value = [...new Set([...selected.value, ...pageIds])]
-  }
+  if (allChecked.value) selected.value = []
+  else selected.value = sorted.value.map((q) => q.id)
 }
-// 筛选 / 翻页 / 切换排序后只保留仍可见的勾选，避免误删看不到的记录
-watch([keyword, courseFilter, sortBy, page], () => {
-  const visible = new Set(paged.value.map((q) => q.id))
+// 筛选 / 切换排序后结果集变了，只保留仍在结果里的勾选，避免误删看不到的记录（翻页不清）
+watch([keyword, courseFilter, sortBy], () => {
+  const visible = new Set(sorted.value.map((q) => q.id))
   selected.value = selected.value.filter((id) => visible.has(id))
 })
 
@@ -196,9 +193,15 @@ async function confirmBatchDelete() {
       </div>
     </div>
 
-    <!-- 分页条：每页 10 / 20 / 30 条 -->
+    <!-- 分页条：全选 + 每页 10 / 20 / 30 条 -->
     <div class="pager">
-      <span class="pager-info">共 {{ sorted.length }} 条</span>
+      <div class="pager-info">
+        共 {{ sorted.length }} 条
+        <label class="sel-all">
+          <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部记录" @change="toggleSelectAll" />
+          全选
+        </label>
+      </div>
       <div class="pager-size">
         <span class="pager-label">每页</span>
         <div class="seg-tabs">
@@ -229,12 +232,14 @@ async function confirmBatchDelete() {
           {{ detail.asker }} · {{ courseDisplay(detail.course) }} · 来自「{{ detail.noteTitle }}」 · {{ detail.time }}
         </p>
         <div class="answer" v-html="renderAnswer(detail.answer)"></div>
-        <div class="src-row">
-          <span class="src-label">溯源出处</span>
-          <template v-if="detail.sources.length">
-            <span v-for="(s, i) in detail.sources" :key="i" class="src-chip">{{ s.label }}</span>
-          </template>
-          <span v-else class="src-none">无</span>
+        <div class="src-block">
+          <div class="src-label">溯源出处</div>
+          <div class="src-chips">
+            <template v-if="detail.sources.length">
+              <span v-for="(s, i) in detail.sources" :key="i" class="src-chip">{{ s.label }}</span>
+            </template>
+            <span v-else class="src-none">无</span>
+          </div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="detail = null">关闭</button>
@@ -278,7 +283,8 @@ async function confirmBatchDelete() {
 .batch-bar { display: flex; align-items: center; gap: 10px; background: var(--tint-rose, #feeceb); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 12px; }
 .batch-count { font-size: 13px; font-weight: 600; color: #d92d20; margin-right: auto; }
 .qa-check { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; }
-.row-check { width: 15px; height: 15px; accent-color: var(--brand-purple, #5645d4); cursor: pointer; }
+.row-check { width: 17px; height: 17px; accent-color: var(--brand-purple, #5645d4); cursor: pointer; }
+.sel-all { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; cursor: pointer; user-select: none; }
 .modal-sm { max-width: 440px; width: 100%; }
 .hint-err { font-size: 13px; color: #d92d20; margin-bottom: 10px; }
 
@@ -329,8 +335,9 @@ async function confirmBatchDelete() {
   font-size: 12px; line-height: 1.7; color: var(--slate);
 }
 .answer :deep(.src-note-title) { font-weight: 600; color: var(--slate); margin-bottom: 2px; }
-.src-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.src-label { font-size: 12.5px; font-weight: 600; color: var(--slate); flex-shrink: 0; }
+.src-block { margin-bottom: 4px; }
+.src-label { font-size: 12.5px; font-weight: 600; color: var(--slate); margin-bottom: 8px; }
+.src-chips { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
 .src-chip {
   font-size: 12px; color: var(--slate); background: var(--surface-soft);
   border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 10px;
