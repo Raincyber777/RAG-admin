@@ -4,9 +4,89 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" href="/favicon.ico" />
+    <script>
+      // 动态站点图标：Chrome/Edge 不播放 SVG 图标里的 SMIL 动画，用 canvas 逐帧重绘
+      // （星标呼吸 + 紫晕收放 + 星尖闪烁）换 dataURL 驱动；Firefox 由上面的 SVG 动画驱动，
+      // 本脚本兼容接管。系统开启「减少动效」时不播放。
+      ;(function () {
+        if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return
+        var link = document.querySelector('link[rel="icon"]')
+        if (!link) return
+        var cv = document.createElement('canvas')
+        cv.width = cv.height = 32
+        var g = cv.getContext('2d')
+        if (!g || !g.roundRect) return
+        var bg = g.createLinearGradient(5, 3, 27, 29)
+        bg.addColorStop(0, '#1e2249')
+        bg.addColorStop(1, '#0a0c1e')
+        var st = g.createLinearGradient(9, 6, 25, 25)
+        st.addColorStop(0, '#d9d3fd')
+        st.addColorStop(1, '#9d8cf1')
+        function starPath(cx, cy, r) {
+          // 四角星：与 favicon.svg 同款曲线（控制柄 0.6r，侧向偏移 0.174k）
+          var k = 0.6 * r
+          var lat = 0.174
+          var T = [[0, -1], [1, 0], [0, 1], [-1, 0]]
+          g.beginPath()
+          g.moveTo(cx, cy - r)
+          for (var i = 0; i < 4; i++) {
+            var t0 = T[i]
+            var t1 = T[(i + 1) % 4]
+            var p0x = cx + t0[0] * r
+            var p0y = cy + t0[1] * r
+            var p1x = cx + t1[0] * r
+            var p1y = cy + t1[1] * r
+            g.bezierCurveTo(
+              p0x - t0[0] * k + t1[0] * k * lat, p0y - t0[1] * k + t1[1] * k * lat,
+              p1x - t1[0] * k + t0[0] * k * lat, p1y - t1[1] * k + t0[1] * k * lat,
+              p1x, p1y
+            )
+          }
+          g.closePath()
+        }
+        function draw(t) {
+          g.clearRect(0, 0, 32, 32)
+          g.fillStyle = bg
+          g.beginPath()
+          g.roundRect(1, 1, 30, 30, 9)
+          g.fill()
+          var breathe = (Math.sin(t / 900) + 1) / 2 // 0..1
+          g.save()
+          g.shadowColor = 'rgba(162,146,242,' + (0.35 + 0.35 * breathe).toFixed(3) + ')'
+          g.shadowBlur = 3 + 5 * breathe
+          g.fillStyle = st
+          starPath(17, 15.5, 11.5 * (0.9 + 0.1 * breathe))
+          g.fill()
+          g.restore()
+          g.globalAlpha = 0.25 + 0.75 * ((Math.sin(t / 700) + 1) / 2)
+          g.fillStyle = '#e8e2ff'
+          starPath(9.5, 22.5, 2.6)
+          g.fill()
+          g.globalAlpha = 1
+          link.href = cv.toDataURL('image/png')
+        }
+        var timer = null
+        function start() {
+          if (!timer) {
+            draw(0)
+            timer = setInterval(draw, 90)
+          }
+        }
+        function stop() {
+          if (timer) {
+            clearInterval(timer)
+            timer = null
+          }
+        }
+        document.addEventListener('visibilitychange', function () {
+          document.hidden ? stop() : start()
+        })
+        start()
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>智学纪要 · 管理控制台</title>
-    <script type="module" crossorigin src="/assets/index-5HycEmHu.js"></script>
+    <script type="module" crossorigin src="/assets/index-dAKZPoJr.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-Bai66wZ4.css">
   </head>
   <body>
