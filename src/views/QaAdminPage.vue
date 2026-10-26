@@ -3,13 +3,25 @@
  * 问答记录：查看用户端智能问答的记录明细（问题 / 回答 / 溯源出处）
  * 与用户端问答页同构：每个回答都带录音时间戳或板书页码
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CourseSelect from '@/components/CourseSelect.vue'
-import { qaRecords, removeQaRecords, courseDisplay, type QaRecord } from '@/store/admin'
+import { qaRecords, removeQaRecords, ensureQaLoaded, courseDisplay, type QaRecord } from '@/store/admin'
 
 const keyword = ref('')
 const courseFilter = ref('全部')
+
+// 加载失败不再静默变空列表：页面自身兜底加载 + 明确的失败态与重试（布局预载的错误会被吞掉）
+const loadError = ref('')
+async function reload() {
+  loadError.value = ''
+  try {
+    await ensureQaLoaded()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : '问答记录加载失败'
+  }
+}
+onMounted(reload)
 
 const filtered = computed(() =>
   qaRecords.filter((q) => {
@@ -131,6 +143,11 @@ async function confirmBatchDelete() {
 
     <p v-if="tip" class="done-tip"><AppIcon name="check" :size="14" /> {{ tip }}</p>
 
+    <div v-if="loadError" class="card empty load-error">
+      <AppIcon name="x" :size="16" /> {{ loadError }}
+      <button class="btn btn-secondary btn-sm" style="margin-left: 10px" @click="reload">重试</button>
+    </div>
+
     <div v-if="selected.length" class="batch-bar">
       <span class="batch-count">已选 {{ selected.length }} 条记录</span>
       <button class="btn btn-danger btn-sm" @click="showBatchDel = true"><AppIcon name="trash" :size="13" /> 批量删除</button>
@@ -160,7 +177,7 @@ async function confirmBatchDelete() {
         </div>
         <AppIcon name="chevron-right" :size="16" class="qa-arrow" />
       </div>
-      <div v-if="!filtered.length" class="card empty">
+      <div v-if="!loadError && !filtered.length" class="card empty">
         <AppIcon name="search" :size="16" /> 没有符合条件的问答记录
       </div>
     </div>
@@ -253,6 +270,7 @@ async function confirmBatchDelete() {
 
 .empty { text-align: center; color: var(--stone); padding: 36px 0; }
 .empty svg { vertical-align: -3px; margin-right: 6px; }
+.load-error { color: var(--error); padding: 24px 0; }
 
 /* 分页条 */
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
