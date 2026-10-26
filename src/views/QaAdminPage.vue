@@ -58,7 +58,25 @@ function setPageSize(s: number) {
 }
 
 const detail = ref<QaRecord | null>(null)
-const sourceTag = (t: string) => (t === '录音' ? 'tag-blue' : 'tag-yellow')
+
+// 回答渲染：先转义 HTML 再把网址链接化（可点击直达）；「—— 来源说明 ——」后的来源列表
+// 单独分区小字弱化，与答复正文区分主次——与用户端问答页同款处理
+const SOURCE_MARK = '—— 来源说明 ——'
+function renderContent(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/https?:\/\/[^\s<>"'），。；、！？（()]+/g, (u) => `<a class="content-link" href="${u}" target="_blank" rel="noopener">${u}</a>`)
+}
+function renderAnswer(text: string) {
+  const i = text.indexOf(SOURCE_MARK)
+  if (i < 0) return renderContent(text)
+  const body = renderContent(text.slice(0, i).replace(/\n+$/, ''))
+  const src = renderContent(text.slice(i + SOURCE_MARK.length).replace(/^\n+/, ''))
+  return `${body}<div class="src-note"><div class="src-note-title">来源说明</div>${src}</div>`
+}
 
 // ---------- 操作成功提示 ----------
 const tip = ref('')
@@ -169,11 +187,7 @@ async function confirmBatchDelete() {
         </label>
         <div class="qa-main">
           <div class="qa-question">{{ q.question }}</div>
-          <div class="qa-meta">
-            <span class="meta-item"><AppIcon name="user" :size="12" /> {{ q.asker }}</span>
-            <span class="meta-item"><AppIcon name="book" :size="12" /> {{ q.noteTitle }}</span>
-            <span class="meta-item"><AppIcon name="clock" :size="12" /> {{ q.time }}</span>
-          </div>
+          <div class="qa-meta">{{ q.asker }} · {{ q.noteTitle }} · {{ q.time }}</div>
         </div>
         <AppIcon name="chevron-right" :size="16" class="qa-arrow" />
       </div>
@@ -210,16 +224,17 @@ async function confirmBatchDelete() {
     <div v-if="detail" class="modal-mask" @click.self="detail = null">
       <div class="modal qa-modal">
         <div class="modal-title">问答详情</div>
-        <p class="qa-q">{{ detail.question }}</p>
+        <div class="qa-q">{{ detail.question }}</div>
         <p class="modal-sub mb-sm">
           {{ detail.asker }} · {{ courseDisplay(detail.course) }} · 来自「{{ detail.noteTitle }}」 · {{ detail.time }}
         </p>
-        <div class="answer">{{ detail.answer }}</div>
+        <div class="answer" v-html="renderAnswer(detail.answer)"></div>
         <div class="src-row">
           <span class="src-label">溯源出处</span>
-          <span v-for="(s, i) in detail.sources" :key="i" class="tag" :class="sourceTag(s.type)">
-            <AppIcon :name="s.type === '录音' ? 'mic' : 'image'" :size="11" /> {{ s.label }}
-          </span>
+          <template v-if="detail.sources.length">
+            <span v-for="(s, i) in detail.sources" :key="i" class="src-chip">{{ s.label }}</span>
+          </template>
+          <span v-else class="src-none">无</span>
         </div>
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="detail = null">关闭</button>
@@ -254,8 +269,7 @@ async function confirmBatchDelete() {
 .qa-row { display: flex; align-items: center; gap: 14px; padding: 15px 18px; cursor: pointer; width: 100%; text-align: left; }
 .qa-main { flex: 1; min-width: 0; }
 .qa-question { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-.qa-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.meta-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--slate); }
+.qa-meta { font-size: 12px; color: var(--slate); }
 .qa-arrow { color: var(--stone); flex-shrink: 0; }
 .sort-tabs { flex-shrink: 0; }
 
@@ -289,16 +303,40 @@ async function confirmBatchDelete() {
 .pager-page { font-size: 12.5px; color: var(--slate); min-width: 72px; text-align: center; }
 
 /* 详情弹窗 */
-.qa-modal { max-width: 600px; width: 100%; }
-.qa-q { font-size: 15.5px; font-weight: 700; line-height: 1.55; margin-bottom: 8px; }
+.qa-modal { max-width: 640px; width: 100%; }
+.qa-q {
+  font-size: 15px; font-weight: 600; line-height: 1.6; margin-bottom: 8px;
+  max-height: 150px; overflow-y: auto; /* 长提问截高滚动，不撑爆弹窗 */
+}
 .modal-sub { color: var(--slate); line-height: 1.7; }
 .answer {
   background: var(--surface-soft); border-radius: var(--radius-md);
   font-size: 13.5px; line-height: 1.8; color: var(--ink);
   padding: 14px 16px; margin-bottom: 14px;
+  max-height: 340px; overflow-y: auto; /* 长回答滚动查看 */
+  white-space: pre-wrap; overflow-wrap: anywhere; /* 保留换行；长网址可断行 */
 }
+.answer::-webkit-scrollbar, .qa-q::-webkit-scrollbar { width: 6px; }
+.answer::-webkit-scrollbar-thumb, .qa-q::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong); border-radius: 999px;
+}
+/* 网址链接化：蓝色可点击直达（与用户端问答页同款） */
+.answer :deep(a.content-link) { color: var(--primary); word-break: break-all; }
+.answer :deep(a.content-link:hover) { text-decoration: underline; }
+/* 来源说明分区（v-html 内容需 :deep）：小字灰字弱化，与正文区分主次 */
+.answer :deep(.src-note) {
+  margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--hairline-strong);
+  font-size: 12px; line-height: 1.7; color: var(--slate);
+}
+.answer :deep(.src-note-title) { font-weight: 600; color: var(--slate); margin-bottom: 2px; }
 .src-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.src-label { font-size: 12.5px; font-weight: 600; color: var(--slate); }
+.src-label { font-size: 12.5px; font-weight: 600; color: var(--slate); flex-shrink: 0; }
+.src-chip {
+  font-size: 12px; color: var(--slate); background: var(--surface-soft);
+  border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 10px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.src-none { font-size: 12.5px; color: var(--stone); }
 
 @media (max-width: 900px) {
   .page { padding: 20px 16px; }
