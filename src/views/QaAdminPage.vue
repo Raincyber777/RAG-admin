@@ -154,6 +154,10 @@ async function confirmBatchDelete() {
         >按热度</button>
       </div>
       <CourseSelect v-model="courseFilter" />
+      <label class="sel-all">
+        <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部记录" @change="toggleSelectAll" />
+        全选
+      </label>
     </div>
 
     <p v-if="tip" class="done-tip"><AppIcon name="check" :size="14" /> {{ tip }}</p>
@@ -193,14 +197,10 @@ async function confirmBatchDelete() {
       </div>
     </div>
 
-    <!-- 分页条：全选 + 每页 10 / 20 / 30 条 -->
+    <!-- 分页条：共 N 条 + 每页 10 / 20 / 30 条（全选在顶部工具栏） -->
     <div class="pager">
       <div class="pager-info">
         共 {{ sorted.length }} 条
-        <label class="sel-all">
-          <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部记录" @change="toggleSelectAll" />
-          全选
-        </label>
       </div>
       <div class="pager-size">
         <span class="pager-label">每页</span>

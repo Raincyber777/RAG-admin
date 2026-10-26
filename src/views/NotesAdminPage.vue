@@ -109,6 +109,10 @@ async function confirmBatchDelete() {
         <input v-model="keyword" class="input" placeholder="搜索纪要标题 / 上传者 / 主题" />
       </div>
       <CourseSelect v-model="courseFilter" />
+      <label class="sel-all">
+        <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部纪要" @change="toggleSelectAll" />
+        全选
+      </label>
     </div>
 
     <div v-if="selected.length" class="batch-bar">
@@ -144,14 +148,10 @@ async function confirmBatchDelete() {
       </div>
     </div>
 
-    <!-- 分页条：全选 + 每页 10 / 20 / 30 条 -->
+    <!-- 分页条：共 N 份 + 每页 10 / 20 / 30 条（全选在顶部工具栏） -->
     <div class="pager">
       <div class="pager-info">
         共 {{ filtered.length }} 份
-        <label class="sel-all">
-          <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部纪要" @change="toggleSelectAll" />
-          全选
-        </label>
       </div>
       <div class="pager-size">
         <span class="pager-label">每页</span>
