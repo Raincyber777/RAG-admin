@@ -141,8 +141,11 @@ export async function listAll<T>(path: string, params: Record<string, string> = 
   while (url) {
     const page = await request<Page<T>>(url)
     out.push(...page.results)
-    // next 是后端按请求 Host 拼的绝对地址，剥掉协议+域名只留路径，保证始终同源翻页
-    url = page.next ? page.next.replace(/^https?:\/\/[^/]+/, '') : ''
+    // next 是后端按请求 Host 拼的绝对地址（路径已含 /api 前缀）：剥掉协议+域名后
+    // 还要再剥掉 BASE 前缀，否则 request 的 `${BASE}${path}` 会拼成 /api/api/… → 翻页 404
+    url = page.next
+      ? page.next.replace(/^https?:\/\/[^/]+/, '').replace(new RegExp(`^${BASE}(?=/)`), '')
+      : ''
   }
   return out
 }
