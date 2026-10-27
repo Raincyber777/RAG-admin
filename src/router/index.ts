@@ -12,8 +12,6 @@ import { acceptSso, logoutAdmin, session, USER_ORIGIN } from '@/store/auth'
  * /admin/qa        问答记录
  * /admin/quiz      题库管理
  * /admin/feedbacks 问题反馈
- * /admin/samples   训练样本（生成 / 审核 / 导出 + 知识库缺口）
- * /admin/audit     内容审核（敏感内容脱敏日志）
  * /admin/announcements 公告管理（公告 / 日志 / 协议）
  * /admin/guide     使用说明
  * /admin/settings  个人设置
@@ -33,8 +31,6 @@ const router = createRouter({
         { path: 'qa', name: 'qa', component: () => import('@/views/QaAdminPage.vue'), meta: { title: '问答记录' } },
         { path: 'quiz', name: 'quiz', component: () => import('@/views/QuizAdminPage.vue'), meta: { title: '题库管理' } },
         { path: 'feedbacks', name: 'feedbacks', component: () => import('@/views/FeedbackAdminPage.vue'), meta: { title: '问题反馈' } },
-        { path: 'samples', name: 'samples', component: () => import('@/views/SampleReviewPage.vue'), meta: { title: '训练样本' } },
-        { path: 'audit', name: 'audit', component: () => import('@/views/AuditLogPage.vue'), meta: { title: '内容审核' } },
         { path: 'announcements', name: 'announcements', component: () => import('@/views/AnnouncementAdminPage.vue'), meta: { title: '公告管理' } },
         { path: 'guide', name: 'guide', component: () => import('@/views/GuideAdminPage.vue'), meta: { title: '使用说明' } },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsPage.vue'), meta: { title: '个人设置' } },
