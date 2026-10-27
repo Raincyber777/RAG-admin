@@ -243,6 +243,8 @@ export interface DashboardEvent {
 export interface DashboardData {
   weekly: DashboardWeekly[]
   events: DashboardEvent[]
+  /** 热门知识点：全平台问答命中的知识片段聚合（同个人看板词云来源） */
+  hot_terms?: { text: string; count: number }[]
   counts: { users_7d: number; notes_7d: number; qa_7d: number }
 }
 

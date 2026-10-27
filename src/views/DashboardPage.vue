@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 数据看板：核心指标 + 近 7 日问答量（ECharts 柱状图）+ 课程分布（ECharts 条形图）
- * 热门追问词：从问答记录的「问题 + 回答」文本实时统计高频概念，问答变化词云随之变化
+ * 热门知识点：后端聚合全平台问答命中的知识片段（hot_terms），命中越多字号越大
  * 最新动态：轮播展示，最新一条定期从顶部推入、依次覆盖旧动态
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
@@ -9,7 +9,7 @@ import * as echarts from 'echarts'
 import AppIcon from '@/components/AppIcon.vue'
 import { accounts } from '@/store/auth'
 import {
-  notes, qaRecords, quizItems, feedbacks, weeklyQa, recentEvents, dashboardCounts, ensureDashboardLoaded,
+  notes, qaRecords, quizItems, feedbacks, weeklyQa, recentEvents, hotTerms, dashboardCounts, ensureDashboardLoaded,
 } from '@/store/admin'
 import type { DashboardEvent } from '@/api'
 
@@ -152,24 +152,8 @@ onBeforeUnmount(() => {
   distChart?.dispose()
 })
 
-// ---------- 热门追问词：从问答记录文本实时统计 ----------
-const CANDIDATE_WORDS = [
-  '泰勒公式', '麦克劳林', '拉格朗日', '佩亚诺', '级数', '收敛', '莱布尼茨',
-  '进程', '线程', '阻塞', '调度', '页面置换', 'LRU', '虚拟内存', '缺页',
-  '二叉树', '遍历', '先序', '中序', '后序', '完全二叉树', '时间复杂度',
-  'Dijkstra', 'Floyd', '最短路径', '负权', '邻接',
-  '偏导数', '全微分', '连续', '可微',
-]
-function countOccurrences(text: string, word: string) {
-  return text.split(word).length - 1
-}
-const hotWords = computed(() => {
-  const text = qaRecords.map((q) => `${q.question} ${q.answer}`).join(' ').toLowerCase()
-  return CANDIDATE_WORDS.map((word) => ({ word, count: countOccurrences(text, word) }))
-    .filter((r) => r.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
-})
+// ---------- 热门知识点：后端聚合全平台问答命中的知识片段（/api/stats/dashboard/ hot_terms） ----------
+const hotWords = computed(() => hotTerms.value)
 const maxHot = computed(() => Math.max(...hotWords.value.map((w) => w.count), 1))
 const hotSize = (c: number) => 12 + Math.round((c / maxHot.value) * 6)
 const hotTag = (i: number) => ['tag-purple', 'tag-blue', 'tag-green', 'tag-orange', 'tag-yellow'][i % 5]
@@ -234,18 +218,18 @@ const visibleEvents = computed<DashboardEvent[]>(() => {
       </div>
 
       <div class="col">
-        <!-- 热门追问词（按问答记录实时统计） -->
+        <!-- 热门知识点（问答命中片段实时聚合） -->
         <section class="card card-lg">
-          <div class="h4 mb-sm">热门追问词</div>
-          <p class="text-caption mb-sm">实时统计自智能问答的问题与回答，追问越多字号越大</p>
+          <div class="h4 mb-sm">热门知识点</div>
+          <p class="text-caption mb-sm">实时统计自智能问答命中的知识片段，命中越多字号越大</p>
           <div class="word-cloud">
             <span
-              v-for="(w, i) in hotWords" :key="w.word"
+              v-for="(w, i) in hotWords" :key="w.text"
               class="tag word" :class="hotTag(i)"
               :style="{ fontSize: hotSize(w.count) + 'px' }"
-              :title="`问答记录中出现 ${w.count} 次`"
-            >{{ w.word }}</span>
-            <span v-if="!hotWords.length" class="text-caption">暂无热门追问词</span>
+              :title="`问答命中 ${w.count} 次`"
+            >{{ w.text }}</span>
+            <span v-if="!hotWords.length" class="text-caption">暂无热门知识点</span>
           </div>
         </section>
 

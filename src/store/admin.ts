@@ -516,9 +516,10 @@ export async function removeCourseDisplay(display: string) {
   ])
 }
 
-// ---------- 看板统计（近 7 日问答量 / 最新动态：来自 /api/stats/dashboard/，失败显示空态） ----------
+// ---------- 看板统计（近 7 日问答量 / 最新动态 / 热门知识点：来自 /api/stats/dashboard/，失败显示空态） ----------
 export const weeklyQa = ref<DashboardWeekly[]>([])
 export const recentEvents = ref<DashboardEvent[]>([])
+export const hotTerms = ref<{ text: string; count: number }[]>([])
 export const dashboardCounts = ref({ users_7d: 0, notes_7d: 0, qa_7d: 0 })
 
 let dashboardLoading: Promise<void> | null = null
@@ -529,6 +530,7 @@ export function ensureDashboardLoaded(): Promise<void> {
     .then((d) => {
       weeklyQa.value = d.weekly ?? []
       recentEvents.value = d.events ?? []
+      hotTerms.value = d.hot_terms ?? []
       dashboardCounts.value = d.counts ?? dashboardCounts.value
     })
     .finally(() => {
