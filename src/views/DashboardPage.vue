@@ -7,23 +7,30 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import AppIcon from '@/components/AppIcon.vue'
-import { accounts } from '@/store/auth'
+import { accounts, ensureAccountsLoaded } from '@/store/auth'
 import {
   notes, qaRecords, quizItems, feedbacks, weeklyQa, recentEvents, hotTerms, dashboardCounts, ensureDashboardLoaded,
+  ensureNotesLoaded, ensureQaLoaded, ensureQuizLoaded, ensureFeedbacksLoaded,
 } from '@/store/admin'
-import type { DashboardEvent } from '@/api'
+import { statsApi, type DashboardEvent, type PlatformStats } from '@/api'
 
 const delta7 = (n: number, unit: string) => (n ? `近 7 日 +${n} ${unit}` : '近 7 日无新增')
 
+// 巡检列表加载失败时的平台口径兜底（/stats/summary/），避免四张卡全 0 的假象
+const summary = ref<PlatformStats | null>(null)
+
 // 核心指标实时来自巡检数据；近 7 日增量来自 /api/stats/dashboard/
 const stats = computed(() => {
-  const userCount = accounts.filter((a) => a.role === 'user').length
-  const pendingCount = feedbacks.filter((f) => f.status === '待处理').length
+  const userCount = accounts.filter((a) => a.role === 'user').length || summary.value?.users || 0
+  const noteCount = notes.length || summary.value?.notes || 0
+  const qaCount = qaRecords.length || summary.value?.qa_records || 0
+  const quizCount = quizItems.length || summary.value?.quiz_items || 0
+  const pendingCount = feedbacks.filter((f) => f.status === '待处理').length || summary.value?.pending_feedbacks || 0
   return [
     { label: '用户总数', value: userCount, icon: 'users', tint: 'st-lavender', delta: delta7(dashboardCounts.value.users_7d, '人') },
-    { label: '课堂纪要', value: notes.length, icon: 'book', tint: 'st-sky', delta: delta7(dashboardCounts.value.notes_7d, '份') },
-    { label: '问答记录', value: qaRecords.length, icon: 'chat', tint: 'st-mint', delta: `近 7 日 ${weeklyQa.value.reduce((s, w) => s + w.count, 0)} 次` },
-    { label: '练习题库', value: quizItems.length, icon: 'edit', tint: 'st-peach', delta: `覆盖 ${new Set(notes.map((n) => n.course)).size} 门课程` },
+    { label: '课堂纪要', value: noteCount, icon: 'book', tint: 'st-sky', delta: delta7(dashboardCounts.value.notes_7d, '份') },
+    { label: '问答记录', value: qaCount, icon: 'chat', tint: 'st-mint', delta: `近 7 日 ${weeklyQa.value.reduce((s, w) => s + w.count, 0)} 次` },
+    { label: '练习题库', value: quizCount, icon: 'edit', tint: 'st-peach', delta: `覆盖 ${new Set(notes.map((n) => n.course)).size} 门课程` },
     { label: '待处理反馈', value: pendingCount, icon: 'flag', tint: 'st-rose', delta: pendingCount ? '需要尽快处理' : '暂无待办' },
   ]
 })
@@ -145,6 +152,15 @@ onMounted(() => {
   window.addEventListener('resize', onResize)
   // 近 7 日问答量与最新动态：进页面拉取（失败静默，显示空态）
   void ensureDashboardLoaded().catch(() => {})
+  // 巡检列表兜底：布局预载偶发失败时在这里补拉（幂等）；仍为空再取平台口径，
+  // 避免登录即进看板时四张卡全 0、只有图表有数据的假象
+  void Promise.allSettled([
+    ensureAccountsLoaded(), ensureNotesLoaded(), ensureQaLoaded(), ensureQuizLoaded(), ensureFeedbacksLoaded(),
+  ]).then(() => {
+    if (!accounts.length || !notes.length || !qaRecords.length || !quizItems.length) {
+      statsApi.summary().then((s) => { summary.value = s }).catch(() => {})
+    }
+  })
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
