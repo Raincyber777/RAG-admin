@@ -153,23 +153,26 @@ async function markDoneInModal() {
           <span class="tag" :class="detail.status === '待处理' ? 'tag-orange' : 'tag-green'">{{ detail.status }}</span>
         </p>
 
-        <div class="sec">
-          <div class="sec-title"><AppIcon name="file" :size="13" /> 详细描述</div>
-          <p class="fb-detail-text">{{ detail.content }}</p>
-        </div>
+        <!-- 中间内容区独立滚动：标题与操作按钮始终可见，截图再多也只滚这一段 -->
+        <div class="fb-body">
+          <div class="sec">
+            <div class="sec-title"><AppIcon name="file" :size="13" /> 详细描述</div>
+            <p class="fb-detail-text">{{ detail.content }}</p>
+          </div>
 
-        <div v-if="detail.images.length" class="sec">
-          <div class="sec-title"><AppIcon name="image" :size="13" /> 用户截图（{{ detail.images.length }}）</div>
-          <div class="shot-grid">
-            <img
-              v-for="(img, i) in detail.images" :key="i"
-              :src="img" class="shot-img" alt="用户反馈截图"
-              @click="preview = img"
-            />
+          <div v-if="detail.images.length" class="sec">
+            <div class="sec-title"><AppIcon name="image" :size="13" /> 用户截图（{{ detail.images.length }}）</div>
+            <div class="shot-grid">
+              <img
+                v-for="(img, i) in detail.images" :key="i"
+                :src="img" class="shot-img" alt="用户反馈截图"
+                @click="preview = img"
+              />
+            </div>
           </div>
         </div>
 
-        <div class="modal-actions">
+        <div class="modal-actions fb-actions">
           <button class="btn btn-secondary" @click="detail = null">关闭</button>
           <button v-if="detail.status === '待处理'" class="btn btn-primary" @click="markDoneInModal">
             <AppIcon name="check" :size="14" /> 标记已处理
@@ -230,8 +233,13 @@ async function markDoneInModal() {
 .pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .pager-page { font-size: 12.5px; color: var(--slate); min-width: 72px; text-align: center; }
 
-/* 详情弹窗 */
-.fb-modal { max-width: 640px; width: 100%; max-height: 86vh; overflow-y: auto; }
+/* 详情弹窗：标题 + 滚动内容区 + 钉底按钮；截图多时只滚内容区，按钮不消失 */
+.fb-modal {
+  max-width: 640px; width: 100%; max-height: 86vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.fb-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 6px; }
+.fb-actions { border-top: 1px solid var(--hairline); padding-top: 14px; margin-top: 4px; margin-bottom: 0; }
 .fb-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
 .fb-sub span { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }
 .sec { margin-bottom: 16px; }
@@ -240,7 +248,11 @@ async function markDoneInModal() {
   font-size: 13px; font-weight: 700; margin-bottom: 7px; color: var(--ink);
 }
 .fb-detail-text { font-size: 13px; color: var(--slate); line-height: 1.8; white-space: pre-wrap; }
-.shot-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.shot-grid {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  max-height: 46vh; overflow-y: auto;            /* 截图很多时本区域上下滚动 */
+  padding: 2px;                                   /* 给 hover 描边留空间，避免裁切 */
+}
 .shot-img {
   width: 180px; height: 120px; object-fit: cover;
   border: 1px solid var(--hairline-strong); border-radius: var(--radius-md);
