@@ -108,11 +108,13 @@ async function confirmBatchDelete() {
         <AppIcon name="search" :size="15" class="search-ico" />
         <input v-model="keyword" class="input" placeholder="搜索纪要标题 / 上传者 / 主题" />
       </div>
-      <CourseSelect v-model="courseFilter" />
-      <label class="sel-all">
-        <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部纪要" @change="toggleSelectAll" />
-        全选
-      </label>
+      <div class="filters">
+        <CourseSelect v-model="courseFilter" />
+        <label class="sel-all">
+          <input type="checkbox" class="row-check" :checked="allChecked" :indeterminate="someChecked" aria-label="全选全部纪要" @change="toggleSelectAll" />
+          全选
+        </label>
+      </div>
     </div>
 
     <div v-if="selected.length" class="batch-bar">
@@ -258,7 +260,8 @@ async function confirmBatchDelete() {
 /* 多选批量操作 */
 .batch-bar { display: flex; align-items: center; gap: 10px; background: var(--tint-rose, #feeceb); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 12px; }
 .batch-count { font-size: 13px; font-weight: 600; color: #d92d20; margin-right: auto; }
-.sel-all { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; cursor: pointer; user-select: none; }
+.sel-all { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .note-main { flex: 1; min-width: 0; }
 .note-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .note-title { font-size: 14.5px; font-weight: 700; }
