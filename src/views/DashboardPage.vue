@@ -4,7 +4,7 @@
  * 热门知识点：后端聚合全平台问答命中的知识片段（hot_terms），命中越多字号越大
  * 最新动态：轮播展示，最新一条定期从顶部推入、依次覆盖旧动态
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import AppIcon from '@/components/AppIcon.vue'
 import { accounts, ensureAccountsLoaded } from '@/store/auth'
@@ -102,8 +102,13 @@ watch(weeklyQa, () => trendChart?.setOption(trendOption()))
 const courseDist = computed(() => {
   const map = new Map<string, number>()
   for (const n of notes) map.set(n.course, (map.get(n.course) || 0) + 1)
-  return [...map.entries()].map(([course, count]) => ({ course, count }))
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([course, count]) => ({ course, count }))
 })
+
+// 容器高度随课程数走：每行 34px、下限保持 168px；固定矮容器会把多门课挤成一团且触发 ECharts 自动省略标签
+const distHeight = computed(() => Math.max(168, courseDist.value.length * 34 + 24))
 
 function distOption() {
   return {
@@ -121,7 +126,7 @@ function distOption() {
       type: 'category',
       data: courseDist.value.map((r) => r.course).reverse(),
       axisLine: { show: false }, axisTick: { show: false },
-      axisLabel: { color: '#3d4351', fontSize: 12, fontWeight: 600 },
+      axisLabel: { color: '#3d4351', fontSize: 12, fontWeight: 600, interval: 0 },
     },
     series: [{
       type: 'bar',
@@ -139,8 +144,11 @@ function initDist() {
   distChart.setOption(distOption())
 }
 
-// 纪要数据后到时刷新课程分布（巡检数据异步加载）
-watch(courseDist, () => distChart?.setOption(distOption()))
+// 纪要数据后到时刷新课程分布（巡检数据异步加载）；行数变化带动容器高度变化，需 resize
+watch(courseDist, () => {
+  distChart?.setOption(distOption())
+  void nextTick(() => distChart?.resize())
+})
 
 function onResize() {
   trendChart?.resize()
@@ -229,7 +237,7 @@ const visibleEvents = computed<DashboardEvent[]>(() => {
         <!-- 课程分布（ECharts） -->
         <section class="card card-lg">
           <div class="h4 mb-sm">课程分布（按纪要数）</div>
-          <div ref="distRef" class="chart chart-dist" role="img" aria-label="课程分布条形图"></div>
+          <div ref="distRef" class="chart chart-dist" :style="{ height: distHeight + 'px' }" role="img" aria-label="课程分布条形图"></div>
         </section>
       </div>
 
@@ -290,7 +298,7 @@ const visibleEvents = computed<DashboardEvent[]>(() => {
 /* ECharts 容器 */
 .chart { width: 100%; }
 .chart-trend { height: 250px; }
-.chart-dist { height: 168px; }
+.chart-dist { min-height: 168px; }
 
 /* 词云 */
 .word-cloud { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
